@@ -56,6 +56,7 @@ import {
 } from "react";
 
 export type FsEntry = { kind: "dir" | "file"; name: string; path: string };
+type FinderScope = "all" | "files";
 
 type CanvasProps = {
   workspace: Workspace;
@@ -132,6 +133,7 @@ export function Canvas({
   );
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [finderOpen, setFinderOpen] = useState(false);
+  const [finderScope, setFinderScope] = useState<FinderScope>("all");
   const [finderQuery, setFinderQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalRequest | null>(null);
@@ -244,6 +246,7 @@ export function Canvas({
   useEffect(() => {
     if (!launcherFileSearch) return;
     setFinderQuery(launcherFileSearch.query);
+    setFinderScope("files");
     setFinderOpen(true);
     onLauncherFileSearchHandled();
   }, [launcherFileSearch, onLauncherFileSearchHandled]);
@@ -396,7 +399,10 @@ export function Canvas({
         selectedEntry,
         selectedPath,
         repositories,
-        setFinderOpen,
+        setFinderOpen: (open) => {
+          if (open) setFinderScope("all");
+          setFinderOpen(open);
+        },
         setModal,
         openExplorerPane,
         openEditorPane,
@@ -497,12 +503,13 @@ export function Canvas({
     () =>
       buildFinderResults({
         query: finderQuery,
+        scope: finderScope,
         workspace,
         fileTrees,
         repositories,
         commands,
       }),
-    [commands, fileTrees, finderQuery, repositories, workspace],
+    [commands, fileTrees, finderQuery, finderScope, repositories, workspace],
   );
 
   useEffect(() => {
@@ -512,6 +519,7 @@ export function Canvas({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "/") {
         e.preventDefault();
+        setFinderScope("all");
         setFinderOpen(true);
       } else if (e.key === "Escape") {
         setFinderOpen(false);
@@ -632,6 +640,7 @@ export function Canvas({
       {finderOpen ? (
         <Finder
           query={finderQuery}
+          scope={finderScope}
           results={finderResults}
           onQueryChange={setFinderQuery}
           onClose={() => setFinderOpen(false)}
@@ -1674,12 +1683,14 @@ function SegmentedControl({
 
 function Finder({
   query,
+  scope,
   results,
   onQueryChange,
   onPick,
   onClose,
 }: {
   query: string;
+  scope: FinderScope;
   results: FinderResult[];
   onQueryChange: (query: string) => void;
   onPick: (result: FinderResult) => void;
@@ -1724,7 +1735,7 @@ function Finder({
                 onClose();
               }
             }}
-            placeholder="Find files, panes, repositories, commands, or jump to /absolute/path"
+            placeholder={scope === "files" ? "Find files and folders" : "Find files, panes, repositories, commands, or jump to /absolute/path"}
             className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground/45"
           />
         </div>
@@ -2042,6 +2053,7 @@ function createWorkspaceCommands(args: {
 
 function buildFinderResults(args: {
   query: string;
+  scope: FinderScope;
   workspace: Workspace;
   fileTrees: Map<string, FsEntry[]>;
   repositories: GitRepository[];
@@ -2059,36 +2071,39 @@ function buildFinderResults(args: {
       });
     }
   }
-  for (const pane of args.workspace.panes) {
-    results.push({
-      id: `pane:${pane.id}`,
-      label: pane.title,
-      detail: detailForPane(pane),
-      kind: "pane",
-    });
+  if (args.scope === "all") {
+    for (const pane of args.workspace.panes) {
+      results.push({
+        id: `pane:${pane.id}`,
+        label: pane.title,
+        detail: detailForPane(pane),
+        kind: "pane",
+      });
+    }
+    for (const repo of args.repositories) {
+      results.push({
+        id: `repository:${repo.rootPath}`,
+        label: repo.name,
+        detail: repo.rootPath,
+        kind: "repository",
+      });
+    }
+    for (const command of args.commands) {
+      if (!command.enabled().enabled) continue;
+      results.push({
+        id: `command:${command.id}`,
+        label: command.label,
+        detail: command.hint,
+        kind: "command",
+      });
+    }
   }
-  for (const repo of args.repositories) {
-    results.push({
-      id: `repository:${repo.rootPath}`,
-      label: repo.name,
-      detail: repo.rootPath,
-      kind: "repository",
-    });
-  }
-  for (const command of args.commands) {
-    if (!command.enabled().enabled) continue;
-    results.push({
-      id: `command:${command.id}`,
-      label: command.label,
-      detail: command.hint,
-      kind: "command",
-    });
-  }
-  if (query.startsWith("/")) {
+  if (query && (args.scope === "files" || query.startsWith("/"))) {
+    const path = query.startsWith("/") ? query : joinPath(args.workspace.rootPath, query);
     results.unshift({
-      id: `path:${query}`,
+      id: `path:${path}`,
       label: query,
-      detail: query,
+      detail: path,
       kind: "path",
     });
   }
