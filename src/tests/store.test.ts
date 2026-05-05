@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
 import type { AppContext } from "@/server/api";
 import { CanvasStore } from "@/server/store";
-import { DEFAULT_WORKSPACE_SETTINGS, type Workspace, workspaceSchema } from "@/shared/schema";
+import { DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace, workspaceSchema } from "@/shared/schema";
 
 let canvasHome = "";
 
@@ -157,10 +157,27 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
     draftBody: "const two = 2;\n",
   };
   const explorerId = workspace.panes[0]!.id;
+  const customTheme = {
+    id: "custom:test",
+    label: "Test Theme",
+    mode: "light" as const,
+    colors: {
+      ...DEFAULT_THEME_COLORS.light,
+      primary: "#2563eb",
+      panelBg: "rgba(255, 255, 255, 0.82)",
+    },
+  };
 
   const saved = await store.saveWorkspace({
     ...workspace,
-    settings: { theme: "light", defaultView: "canvas", backgroundStyle: "dot", accentColor: "blue", tabbedPanes: false },
+    settings: {
+      theme: "custom:test",
+      defaultView: "canvas",
+      backgroundStyle: "dot",
+      accentColor: "blue",
+      customThemes: [customTheme],
+      tabbedPanes: false,
+    },
     panes: [...workspace.panes, editorOne, editorTwo],
     tiledLayout: {
       type: "leaf",
@@ -172,10 +189,11 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
   });
 
   expect(saved.settings).toEqual({
-    theme: "light",
+    theme: "custom:test",
     defaultView: "canvas",
     backgroundStyle: "dot",
     accentColor: "blue",
+    customThemes: [customTheme],
     tabbedPanes: false,
   });
   expect(saved.tiledLayout?.type).toBe("leaf");

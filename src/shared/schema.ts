@@ -137,21 +137,126 @@ export const tiledLayoutNodeSchema: z.ZodType<TiledLayoutNode> = z.lazy(() =>
   ]),
 );
 
+export const WORKSPACE_THEME_COLOR_KEYS = [
+  "background",
+  "foreground",
+  "muted",
+  "mutedForeground",
+  "primary",
+  "primaryForeground",
+  "secondary",
+  "secondaryForeground",
+  "border",
+  "ring",
+  "surface1",
+  "surface2",
+  "surfaceHover",
+  "panelBg",
+  "chromeBg",
+  "dockBg",
+  "controlBg",
+  "inputBg",
+  "gridLine",
+] as const;
+
+export const DEFAULT_THEME_COLORS = {
+  dark: {
+    background: "#000000",
+    foreground: "#ffffff",
+    muted: "rgba(255, 255, 255, 0.055)",
+    mutedForeground: "#9b9b9b",
+    primary: "rgba(255, 255, 255, 0.92)",
+    primaryForeground: "#0a0a0a",
+    secondary: "rgba(255, 255, 255, 0.07)",
+    secondaryForeground: "#ffffff",
+    border: "rgba(255, 255, 255, 0.13)",
+    ring: "rgba(255, 255, 255, 0.56)",
+    surface1: "rgba(255, 255, 255, 0.035)",
+    surface2: "rgba(255, 255, 255, 0.065)",
+    surfaceHover: "rgba(255, 255, 255, 0.11)",
+    panelBg: "rgba(0, 0, 0, 0.72)",
+    chromeBg: "rgba(0, 0, 0, 0.56)",
+    dockBg: "rgba(0, 0, 0, 0.78)",
+    controlBg: "rgba(255, 255, 255, 0.065)",
+    inputBg: "rgba(255, 255, 255, 0.05)",
+    gridLine: "rgba(255, 255, 255, 0.055)",
+  },
+  light: {
+    background: "#ffffff",
+    foreground: "#050505",
+    muted: "rgba(0, 0, 0, 0.045)",
+    mutedForeground: "#646464",
+    primary: "rgba(5, 5, 5, 0.9)",
+    primaryForeground: "#ffffff",
+    secondary: "rgba(255, 255, 255, 0.66)",
+    secondaryForeground: "#050505",
+    border: "rgba(0, 0, 0, 0.1)",
+    ring: "rgba(5, 5, 5, 0.42)",
+    surface1: "rgba(255, 255, 255, 0.5)",
+    surface2: "rgba(255, 255, 255, 0.68)",
+    surfaceHover: "rgba(0, 0, 0, 0.075)",
+    panelBg: "rgba(255, 255, 255, 0.72)",
+    chromeBg: "rgba(255, 255, 255, 0.58)",
+    dockBg: "rgba(255, 255, 255, 0.76)",
+    controlBg: "rgba(255, 255, 255, 0.52)",
+    inputBg: "rgba(255, 255, 255, 0.58)",
+    gridLine: "rgba(0, 0, 0, 0.045)",
+  },
+} as const;
+
+export const BUILTIN_WORKSPACE_THEMES = [
+  { id: "dark", label: "Dark", mode: "dark", colors: DEFAULT_THEME_COLORS.dark },
+  { id: "light", label: "Light", mode: "light", colors: DEFAULT_THEME_COLORS.light },
+] as const;
+
+const themeColorValueSchema = z.string().trim().min(1).max(96);
+
+export const workspaceThemeColorsSchema = z.object({
+  background: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.background),
+  foreground: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.foreground),
+  muted: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.muted),
+  mutedForeground: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.mutedForeground),
+  primary: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.primary),
+  primaryForeground: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.primaryForeground),
+  secondary: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.secondary),
+  secondaryForeground: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.secondaryForeground),
+  border: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.border),
+  ring: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.ring),
+  surface1: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.surface1),
+  surface2: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.surface2),
+  surfaceHover: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.surfaceHover),
+  panelBg: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.panelBg),
+  chromeBg: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.chromeBg),
+  dockBg: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.dockBg),
+  controlBg: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.controlBg),
+  inputBg: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.inputBg),
+  gridLine: themeColorValueSchema.default(DEFAULT_THEME_COLORS.dark.gridLine),
+});
+
+export const workspaceThemeDefinitionSchema = z.object({
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1).max(48),
+  mode: z.enum(["dark", "light"]).default("dark"),
+  colors: workspaceThemeColorsSchema,
+});
+
 export const workspaceSettingsSchema = z.object({
-  theme: z.enum(["dark", "light"]).default("dark"),
+  theme: z.string().trim().min(1).default("dark"),
   defaultView: z.enum(["panes", "canvas"]).default("panes"),
   backgroundStyle: z.enum(["grid", "flat", "dot"]).default("grid"),
   accentColor: z.enum(["neutral", "blue", "green", "amber", "red", "violet"]).default("neutral"),
+  customThemes: z.array(workspaceThemeDefinitionSchema).default([]),
   tabbedPanes: z.boolean().default(true),
 });
 
 export const DEFAULT_WORKSPACE_SETTINGS = {
-  theme: "dark",
-  defaultView: "panes",
-  backgroundStyle: "grid",
-  accentColor: "neutral",
+  theme: "dark" as const,
+  defaultView: "panes" as const,
+  backgroundStyle: "grid" as const,
+  accentColor: "neutral" as const,
+  customThemes: [],
   tabbedPanes: true,
-} as const;
+};
 
 export const workspaceSchema = z.object({
   id: z.string().trim().min(1),
@@ -240,6 +345,9 @@ export type RepositoriesPaneState = z.infer<typeof repositoriesPaneStateSchema>;
 export type SettingsPaneState = z.infer<typeof settingsPaneStateSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
 export type WorkspaceSettings = z.infer<typeof workspaceSettingsSchema>;
+export type WorkspaceThemeColorKey = (typeof WORKSPACE_THEME_COLOR_KEYS)[number];
+export type WorkspaceThemeColors = z.infer<typeof workspaceThemeColorsSchema>;
+export type WorkspaceThemeDefinition = z.infer<typeof workspaceThemeDefinitionSchema>;
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 export type WorkspaceIndex = z.infer<typeof workspaceIndexSchema>;
 export type GitRepository = z.infer<typeof gitRepositorySchema>;

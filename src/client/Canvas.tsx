@@ -19,8 +19,11 @@ import type {
   TiledLayoutNode,
   Workspace,
   WorkspaceSettings,
+  WorkspaceThemeColorKey,
+  WorkspaceThemeColors,
+  WorkspaceThemeDefinition,
 } from "@/shared/schema";
-import { DEFAULT_WORKSPACE_SETTINGS } from "@/shared/schema";
+import { BUILTIN_WORKSPACE_THEMES, DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS } from "@/shared/schema";
 import { cn } from "@/shared/utils";
 import {
   ChevronDown,
@@ -102,6 +105,27 @@ type ModalRequest =
 const MIN_PANE_WIDTH = 300;
 const MIN_PANE_HEIGHT = 220;
 const PANE_TAB_MIME = "application/x-canvas-pane-tab";
+const THEME_COLOR_FIELDS: Array<{ key: WorkspaceThemeColorKey; label: string }> = [
+  { key: "background", label: "Background" },
+  { key: "foreground", label: "Text" },
+  { key: "muted", label: "Muted Surface" },
+  { key: "mutedForeground", label: "Muted Text" },
+  { key: "primary", label: "Accent" },
+  { key: "primaryForeground", label: "Accent Text" },
+  { key: "secondary", label: "Secondary Surface" },
+  { key: "secondaryForeground", label: "Secondary Text" },
+  { key: "border", label: "Border" },
+  { key: "ring", label: "Focus Ring" },
+  { key: "surface1", label: "Surface 1" },
+  { key: "surface2", label: "Surface 2" },
+  { key: "surfaceHover", label: "Hover Surface" },
+  { key: "panelBg", label: "Pane Glass" },
+  { key: "chromeBg", label: "Chrome Glass" },
+  { key: "dockBg", label: "Dock Glass" },
+  { key: "controlBg", label: "Control Glass" },
+  { key: "inputBg", label: "Input Glass" },
+  { key: "gridLine", label: "Grid Line" },
+];
 
 export function Canvas({
   workspace: incomingWorkspace,
@@ -1585,6 +1609,7 @@ function SettingsPane({
   onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
 }) {
   const settings = workspace.settings;
+  const activeTheme = themeForSettings(settings);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
@@ -1595,15 +1620,12 @@ function SettingsPane({
         <div className="mx-auto grid max-w-2xl gap-4">
           <SettingRow
             title="Theme"
-            detail="Controls the app chrome and pane surfaces."
+            detail="Active palette."
             control={
-              <SegmentedControl
-                value={settings.theme}
-                options={[
-                  { value: "dark", label: "Dark" },
-                  { value: "light", label: "Light" },
-                ]}
-                onChange={(value) => onUpdateSettings({ theme: value as WorkspaceSettings["theme"] })}
+              <ThemeSelector
+                settings={settings}
+                activeTheme={activeTheme}
+                onUpdateSettings={onUpdateSettings}
               />
             }
           />
@@ -1638,16 +1660,9 @@ function SettingsPane({
               />
             }
           />
-          <SettingRow
-            title="Theme Color"
-            detail="Set the accent used for focus rings and selected controls."
-            control={
-              <ColorSwatches
-                value={settings.accentColor}
-                onChange={(value) => onUpdateSettings({ accentColor: value })}
-              />
-            }
-          />
+          <SettingPanel title="Theme Colors" detail={activeTheme.label}>
+            <ThemeColorEditor settings={settings} activeTheme={activeTheme} onUpdateSettings={onUpdateSettings} />
+          </SettingPanel>
           <SettingRow
             title="Tabbed Panes"
             detail="Allow tiled panes to hold multiple tabs."
@@ -1677,39 +1692,188 @@ function SettingsPane({
   );
 }
 
-function ColorSwatches({
+function ThemeSelector({
+  settings,
+  activeTheme,
+  onUpdateSettings,
+}: {
+  settings: WorkspaceSettings;
+  activeTheme: WorkspaceThemeDefinition;
+  onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
+}) {
+  const themes = [...BUILTIN_WORKSPACE_THEMES, ...settings.customThemes];
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <select
+        value={settings.theme}
+        onChange={(event) => onUpdateSettings({ theme: event.target.value })}
+        className="h-8 min-w-40 rounded-md border border-border bg-[var(--control-bg)] px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+      >
+        {themes.map((theme) => (
+          <option key={theme.id} value={theme.id}>
+            {theme.label}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        title="Create custom theme"
+        onClick={() => {
+          const customTheme = makeCustomTheme(activeTheme, settings.customThemes.length + 1);
+          onUpdateSettings({ theme: customTheme.id, customThemes: [...settings.customThemes, customTheme] });
+        }}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-[var(--control-bg)] text-muted-foreground hover:text-foreground"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function ThemeColorEditor({
+  settings,
+  activeTheme,
+  onUpdateSettings,
+}: {
+  settings: WorkspaceSettings;
+  activeTheme: WorkspaceThemeDefinition;
+  onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
+}) {
+  const customTheme = settings.customThemes.find((theme) => theme.id === settings.theme) ?? null;
+  const editable = Boolean(customTheme);
+  const updateCustomTheme = (updater: (theme: WorkspaceThemeDefinition) => WorkspaceThemeDefinition) => {
+    if (!customTheme) return;
+    onUpdateSettings({
+      customThemes: settings.customThemes.map((theme) => (theme.id === customTheme.id ? updater(theme) : theme)),
+    });
+  };
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {customTheme ? (
+          <>
+            <input
+              value={customTheme.label}
+              onChange={(event) => {
+                const label = event.target.value;
+                updateCustomTheme((theme) => ({ ...theme, label: label.trim() ? label : theme.label }));
+              }}
+              className="h-8 min-w-40 rounded-md border border-border bg-[var(--input-bg)] px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+            />
+            <SegmentedControl
+              value={customTheme.mode}
+              options={[
+                { value: "dark", label: "Dark" },
+                { value: "light", label: "Light" },
+              ]}
+              onChange={(value) => updateCustomTheme((theme) => ({ ...theme, mode: value as WorkspaceThemeDefinition["mode"] }))}
+            />
+            <button
+              type="button"
+              title="Delete custom theme"
+              onClick={() =>
+                onUpdateSettings({
+                  theme: customTheme.mode,
+                  customThemes: settings.customThemes.filter((theme) => theme.id !== customTheme.id),
+                })
+              }
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-[var(--control-bg)] text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              const next = makeCustomTheme(activeTheme, settings.customThemes.length + 1);
+              onUpdateSettings({ theme: next.id, customThemes: [...settings.customThemes, next] });
+            }}
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-[var(--control-bg)] px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Plus className="h-4 w-4" />
+            Custom
+          </button>
+        )}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {THEME_COLOR_FIELDS.map((field) => (
+          <ThemeColorInput
+            key={field.key}
+            label={field.label}
+            value={activeTheme.colors[field.key]}
+            disabled={!editable}
+            onChange={(value) =>
+              updateCustomTheme((theme) => ({
+                ...theme,
+                colors: { ...theme.colors, [field.key]: value },
+              }))
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThemeColorInput({
+  label,
   value,
+  disabled,
   onChange,
 }: {
-  value: WorkspaceSettings["accentColor"];
-  onChange: (value: WorkspaceSettings["accentColor"]) => void;
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
 }) {
-  const options: Array<{ value: WorkspaceSettings["accentColor"]; label: string; color: string }> = [
-    { value: "neutral", label: "Neutral", color: "linear-gradient(135deg, #111 0%, #f5f5f5 100%)" },
-    { value: "blue", label: "Blue", color: "#2563eb" },
-    { value: "green", label: "Green", color: "#16a34a" },
-    { value: "amber", label: "Amber", color: "#d97706" },
-    { value: "red", label: "Red", color: "#dc2626" },
-    { value: "violet", label: "Violet", color: "#7c3aed" },
-  ];
+  const hexValue = colorInputValue(value);
   return (
-    <div className="flex flex-wrap justify-end gap-1.5">
-      {options.map((option) => (
+    <label className={cn("grid gap-1 rounded-md border border-border bg-[var(--control-bg)] p-2", disabled && "opacity-70")}>
+      <span className="text-[10px] font-semibold uppercase text-muted-foreground">{label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="h-6 w-6 shrink-0 rounded border border-border" style={{ background: value }} />
+        <input
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-w-0 flex-1 rounded border border-border bg-[var(--input-bg)] px-2 py-1 font-mono text-[11px] outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed"
+        />
         <button
-          key={option.value}
           type="button"
-          title={option.label}
-          aria-label={option.label}
-          onClick={() => onChange(option.value)}
-          className={cn(
-            "h-7 w-7 rounded-md border border-border p-0.5 transition-colors hover:border-ring",
-            option.value === value && "border-ring bg-[var(--control-bg)]",
-          )}
+          disabled={disabled}
+          className="relative h-7 w-7 shrink-0 overflow-hidden rounded border border-border disabled:cursor-not-allowed"
         >
-          <span className="block h-full w-full rounded" style={{ background: option.color }} />
+          <input
+            type="color"
+            value={hexValue}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+            className="absolute inset-[-4px] h-10 w-10 cursor-pointer disabled:cursor-not-allowed"
+          />
         </button>
-      ))}
-    </div>
+      </span>
+    </label>
+  );
+}
+
+function SettingPanel({
+  title,
+  detail,
+  children,
+}: {
+  title: string;
+  detail: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="grid gap-3 rounded-md border border-border bg-secondary p-3">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold">{title}</div>
+        <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{detail}</div>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -1751,6 +1915,47 @@ function SegmentedControl({
       ))}
     </div>
   );
+}
+
+function themeForSettings(settings: WorkspaceSettings): WorkspaceThemeDefinition {
+  const custom = settings.customThemes.find((theme) => theme.id === settings.theme);
+  if (custom) return normalizeTheme(custom);
+  const builtin = BUILTIN_WORKSPACE_THEMES.find((theme) => theme.id === settings.theme) ?? BUILTIN_WORKSPACE_THEMES[0];
+  return normalizeTheme(builtin);
+}
+
+function normalizeTheme(theme: {
+  id: string;
+  label: string;
+  mode: "dark" | "light";
+  colors: Partial<WorkspaceThemeColors>;
+}): WorkspaceThemeDefinition {
+  return {
+    id: theme.id,
+    label: theme.label,
+    mode: theme.mode,
+    colors: { ...DEFAULT_THEME_COLORS[theme.mode], ...theme.colors },
+  };
+}
+
+function makeCustomTheme(source: WorkspaceThemeDefinition, index: number): WorkspaceThemeDefinition {
+  const id = `custom:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 6)}`;
+  return {
+    id,
+    label: `Custom ${index}`,
+    mode: source.mode,
+    colors: { ...source.colors },
+  };
+}
+
+function colorInputValue(value: string): string {
+  const hex = value.trim();
+  if (/^#[\da-f]{6}$/i.test(hex)) return hex;
+  const rgb = hex.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!rgb) return "#000000";
+  const channels = [rgb[1], rgb[2], rgb[3]].map((channel) => Number(channel));
+  if (channels.some((channel) => Number.isNaN(channel) || channel < 0 || channel > 255)) return "#000000";
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function NativeModal({ request, onClose }: { request: ModalRequest; onClose: () => void }) {
