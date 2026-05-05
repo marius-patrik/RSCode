@@ -1,9 +1,10 @@
 import { type ActionGroup, ActionsMenu } from "@/client/ActionsMenu";
 import { BrowserPane } from "@/client/BrowserPane";
-import { MonacoEditor, languageForFile } from "@/client/MonacoEditor";
+import { EditorPane, ExplorerPane, TerminalPane } from "@/client/FilePanes";
+import { RepositoriesPane, SourceControlPane } from "@/client/GitPanes";
 import { SettingsPane } from "@/client/SettingsPane";
-import { TERMINAL_INPUT_EVENT, TerminalNodeView } from "@/client/TerminalNode";
-import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/client/commands";
+import { TERMINAL_INPUT_EVENT } from "@/client/TerminalNode";
+import { commandGroupsFor } from "@/client/commands";
 import {
   clonePaneForSplit,
   makeBrowserPane,
@@ -27,9 +28,16 @@ import {
   splitLayoutAt,
   updateLayoutSplitRatio,
 } from "@/client/paneLayout";
+import {
+  type WorkspaceModalRequest,
+  createWorkspaceCommands,
+  extensionForKind,
+  findEntry,
+  joinPath,
+  parentPath,
+} from "@/client/workspaceCommands";
 import type {
   EditorPaneState,
-  ExplorerPaneState,
   FsEntry,
   GitDiff,
   GitRepository,
@@ -37,8 +45,6 @@ import type {
   PaneRect,
   PaneState,
   PaneType,
-  SourceControlPaneState,
-  TerminalPaneState,
   TiledLayoutNode,
   Workspace,
   WorkspaceSettings,
@@ -46,12 +52,9 @@ import type {
 import { DEFAULT_WORKSPACE_SETTINGS } from "@/shared/schema";
 import { cn } from "@/shared/utils";
 import {
-  ChevronDown,
-  ChevronRight,
   Code2,
   Columns2,
   ExternalLink,
-  FileText,
   Folder,
   FolderGit2,
   GitBranch,
@@ -102,24 +105,6 @@ type CanvasProps = {
   onLauncherTerminalRequestHandled: () => void;
 };
 
-type ModalRequest =
-  | {
-      kind: "prompt";
-      title: string;
-      message: string;
-      defaultValue: string;
-      confirmLabel: string;
-      onSubmit: (value: string) => void;
-    }
-  | {
-      kind: "confirm";
-      title: string;
-      message: string;
-      confirmLabel: string;
-      destructive?: boolean;
-      onConfirm: () => void;
-    };
-
 const PANE_TAB_MIME = "application/x-canvas-pane-tab";
 
 export function Canvas({
@@ -155,7 +140,7 @@ export function Canvas({
   );
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [modal, setModal] = useState<ModalRequest | null>(null);
+  const [modal, setModal] = useState<WorkspaceModalRequest | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   const activePane = workspace.panes.find((pane) => pane.id === workspace.activePaneId) ?? null;
@@ -1165,327 +1150,7 @@ function HeaderButton({ title, onClick, children }: { title: string; onClick: ()
   );
 }
 
-function ExplorerPane({
-  pane,
-  fileTrees,
-  selectedPath,
-  onSelectPath,
-  onUpdatePane,
-  onOpenEditor,
-  onOpenTerminal,
-  onRequestTree,
-}: {
-  pane: ExplorerPaneState;
-  fileTrees: Map<string, FsEntry[]>;
-  selectedPath: string | null;
-  onSelectPath: (path: string | null) => void;
-  onUpdatePane: (paneId: string, updater: (pane: PaneState) => PaneState) => void;
-  onOpenEditor: (path: string, placement?: PaneState["placement"]) => Promise<void>;
-  onOpenTerminal: (cwd?: string, placement?: PaneState["placement"]) => void;
-  onRequestTree: (path: string) => void;
-}) {
-  const expanded = useMemo(() => new Set(pane.expandedPaths), [pane.expandedPaths]);
-  const toggle = (path: string) => {
-    const next = new Set(expanded);
-    if (next.has(path)) {
-      for (const existing of Array.from(next)) {
-        if (existing === path || existing.startsWith(`${path}/`)) next.delete(existing);
-      }
-    } else {
-      next.add(path);
-      onRequestTree(path);
-    }
-    onUpdatePane(pane.id, (candidate) =>
-      candidate.type === "explorer" ? { ...candidate, expandedPaths: Array.from(next) } : candidate,
-    );
-  };
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">{pane.folderPath}</span>
-        <HeaderButton title="Terminal here" onClick={() => onOpenTerminal(pane.folderPath)}>
-          <TerminalIcon className="h-3.5 w-3.5" />
-        </HeaderButton>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto py-1">
-        <TreeBranch
-          path={pane.folderPath}
-          depth={0}
-          expanded={expanded}
-          fileTrees={fileTrees}
-          selectedPath={selectedPath}
-          onSelectPath={(path) => {
-            onSelectPath(path);
-            onUpdatePane(pane.id, (candidate) =>
-              candidate.type === "explorer" ? { ...candidate, selectedPath: path } : candidate,
-            );
-          }}
-          onToggle={toggle}
-          onOpenEditor={onOpenEditor}
-        />
-      </div>
-    </div>
-  );
-}
-
-function TreeBranch({
-  path,
-  depth,
-  expanded,
-  fileTrees,
-  selectedPath,
-  onSelectPath,
-  onToggle,
-  onOpenEditor,
-}: {
-  path: string;
-  depth: number;
-  expanded: Set<string>;
-  fileTrees: Map<string, FsEntry[]>;
-  selectedPath: string | null;
-  onSelectPath: (path: string) => void;
-  onToggle: (path: string) => void;
-  onOpenEditor: (path: string, placement?: PaneState["placement"]) => Promise<void>;
-}) {
-  const entries = fileTrees.get(path);
-  if (!entries) {
-    return <div className="px-3 py-2 font-mono text-[11px] text-muted-foreground">loading...</div>;
-  }
-  if (entries.length === 0) {
-    return <div className="px-3 py-2 font-mono text-[11px] text-muted-foreground">empty</div>;
-  }
-  return (
-    <div>
-      {entries.map((entry) => {
-        const isExpanded = expanded.has(entry.path);
-        const isSelected = selectedPath === entry.path;
-        return (
-          <div key={entry.path}>
-            <button
-              type="button"
-              onClick={() => {
-                onSelectPath(entry.path);
-                if (entry.kind === "dir") onToggle(entry.path);
-                else void onOpenEditor(entry.path);
-              }}
-              className={cn(
-                "flex h-7 w-full items-center gap-1.5 px-2 text-left text-xs hover:bg-[var(--surface-hover)]",
-                isSelected && "bg-secondary text-foreground",
-              )}
-              style={{ paddingLeft: 8 + depth * 14 }}
-            >
-              {entry.kind === "dir" ? (
-                isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                )
-              ) : (
-                <span className="w-3.5 shrink-0" />
-              )}
-              {entry.kind === "dir" ? (
-                <Folder className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="truncate">{entry.name}</span>
-            </button>
-            {entry.kind === "dir" && isExpanded ? (
-              <TreeBranch
-                path={entry.path}
-                depth={depth + 1}
-                expanded={expanded}
-                fileTrees={fileTrees}
-                selectedPath={selectedPath}
-                onSelectPath={onSelectPath}
-                onToggle={onToggle}
-                onOpenEditor={onOpenEditor}
-              />
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function EditorPane({
-  pane,
-  onUpdatePane,
-  onSaveEditor,
-}: {
-  pane: EditorPaneState;
-  onUpdatePane: (paneId: string, updater: (pane: PaneState) => PaneState) => void;
-  onSaveEditor: (pane: EditorPaneState) => Promise<void>;
-}) {
-  return (
-    <div
-      className="h-full"
-      onKeyDown={(event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-          event.preventDefault();
-          void onSaveEditor(pane);
-        }
-      }}
-    >
-      <MonacoEditor
-        value={pane.draftBody}
-        language={languageForFile(pane.filePath.split("/").pop() ?? "")}
-        onChange={(draftBody) =>
-          onUpdatePane(pane.id, (candidate) =>
-            candidate.type === "editor" ? { ...candidate, draftBody, dirty: true } : candidate,
-          )
-        }
-      />
-    </div>
-  );
-}
-
-function TerminalPane({ pane }: { pane: TerminalPaneState }) {
-  return (
-    <div className="h-full p-2">
-      <TerminalNodeView cwd={pane.cwd} paneId={pane.id} />
-    </div>
-  );
-}
-
-function SourceControlPane({
-  workspace,
-  pane,
-  repositories,
-  gitStatuses,
-  onUpdatePane,
-  onRequestGitStatus,
-  onRequestGitDiff,
-}: {
-  workspace: Workspace;
-  pane: SourceControlPaneState;
-  repositories: GitRepository[];
-  gitStatuses: Map<string, GitStatus>;
-  onUpdatePane: (paneId: string, updater: (pane: PaneState) => PaneState) => void;
-  onRequestGitStatus: (repoPath: string) => Promise<GitStatus>;
-  onRequestGitDiff: (repoPath: string, path: string) => Promise<GitDiff>;
-}) {
-  const repoPath = pane.repoPath ?? repositories[0]?.rootPath ?? null;
-  const status = repoPath ? gitStatuses.get(repoPath) : null;
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [diff, setDiff] = useState<string>("");
-
-  useEffect(() => {
-    if (repoPath) void onRequestGitStatus(repoPath);
-  }, [onRequestGitStatus, repoPath]);
-
-  if (!repoPath) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-sm text-muted-foreground">
-        <GitBranch className="h-8 w-8" />
-        <div>No repository found under {workspace.rootPath}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-2">
-        <GitBranch className="h-4 w-4" />
-        <select
-          value={repoPath}
-          onChange={(event) =>
-            onUpdatePane(pane.id, (candidate) =>
-              candidate.type === "sourceControl" ? { ...candidate, repoPath: event.target.value } : candidate,
-            )
-          }
-          className="min-w-0 flex-1 rounded border border-border bg-secondary px-2 py-1 text-xs outline-none"
-        >
-          {repositories.map((repo) => (
-            <option key={repo.rootPath} value={repo.rootPath}>
-              {repo.relativePath}
-            </option>
-          ))}
-          {!repositories.some((repo) => repo.rootPath === repoPath) ? <option value={repoPath}>{repoPath}</option> : null}
-        </select>
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(180px,34%)_1fr]">
-        <div className="min-h-0 overflow-auto border-r border-border">
-          <div className="border-b border-border px-3 py-2 text-xs">
-            <div className="font-semibold">{status?.branch ?? "detached"}</div>
-            <div className="font-mono text-[10px] text-muted-foreground">
-              {status ? (status.clean ? "clean" : `${status.files.length} changed`) : "loading"}
-            </div>
-          </div>
-          {(status?.files ?? []).map((file) => (
-            <button
-              type="button"
-              key={`${file.status}:${file.path}`}
-              onClick={() => {
-                setSelectedFile(file.path);
-                void onRequestGitDiff(repoPath, file.path).then((result) => setDiff(result.diff));
-              }}
-              className={cn(
-                "flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-[var(--surface-hover)]",
-                selectedFile === file.path && "bg-secondary text-foreground",
-              )}
-            >
-              <span className="w-8 shrink-0 font-mono text-[10px] text-muted-foreground">{file.status}</span>
-              <span className="truncate">{file.path}</span>
-            </button>
-          ))}
-        </div>
-        <pre className="min-h-0 overflow-auto p-3 text-[11px] leading-relaxed text-foreground">
-          {selectedFile ? diff || "No diff for selected file." : "Select a changed file to preview a readonly diff."}
-        </pre>
-      </div>
-    </div>
-  );
-}
-
-function RepositoriesPane({
-  pane,
-  repositories,
-  onRequestRepositories,
-  onOpenSourceControl,
-}: {
-  pane: { rootPath: string };
-  repositories: GitRepository[];
-  onRequestRepositories: (rootPath: string) => void;
-  onOpenSourceControl: (repoPath?: string | null, placement?: PaneState["placement"]) => void;
-}) {
-  useEffect(() => {
-    onRequestRepositories(pane.rootPath);
-  }, [onRequestRepositories, pane.rootPath]);
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-2">
-        <FolderGit2 className="h-4 w-4" />
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">{pane.rootPath}</span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto py-1">
-        {repositories.length === 0 ? (
-          <div className="px-3 py-4 text-sm text-muted-foreground">No git repositories found.</div>
-        ) : (
-          repositories.map((repo) => (
-            <button
-              type="button"
-              key={repo.rootPath}
-              onClick={() => onOpenSourceControl(repo.rootPath)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--surface-hover)]"
-            >
-              <FolderGit2 className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{repo.name}</span>
-                <span className="block truncate font-mono text-[10px] text-muted-foreground">{repo.relativePath}</span>
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground">{repo.branch ?? "detached"}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NativeModal({ request, onClose }: { request: ModalRequest; onClose: () => void }) {
+function NativeModal({ request, onClose }: { request: WorkspaceModalRequest; onClose: () => void }) {
   const [value, setValue] = useState(request.kind === "prompt" ? request.defaultValue : "");
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/80" data-context-menu>
@@ -1537,223 +1202,6 @@ function NativeModal({ request, onClose }: { request: ModalRequest; onClose: () 
   );
 }
 
-function createWorkspaceCommands(args: {
-  workspace: Workspace;
-  activePane: PaneState | null;
-  selectedEntry: FsEntry | null;
-  selectedPath: string | null;
-  repositories: GitRepository[];
-  setModal: (modal: ModalRequest) => void;
-  openExplorerPane: () => void;
-  openEditorPane: (path: string, placement?: PaneState["placement"]) => Promise<void>;
-  openTerminalPane: (cwd?: string, placement?: PaneState["placement"]) => void;
-  openBrowserPane: (url?: string, placement?: PaneState["placement"]) => void;
-  openSourceControlPane: (repoPath?: string | null, placement?: PaneState["placement"]) => void;
-  openRepositoriesPane: (placement?: PaneState["placement"]) => void;
-  openSettingsPane: (placement?: PaneState["placement"]) => void;
-  closePane: (paneId: string) => void;
-  splitPane: (paneId: string, direction?: "horizontal" | "vertical") => void;
-  addPaneTab: (paneId: string) => void;
-  setPanePlacement: (paneId: string, placement: PaneState["placement"]) => void;
-  saveEditorPane: (pane: EditorPaneState) => Promise<void>;
-  setView: (view: Workspace["activeView"]) => void;
-  refreshExplorer: () => void;
-  mkdir: (parentPath: string) => void;
-  createFile: (parentPath: string, kind: "markdown" | "json" | "yaml" | "typescript" | "plain") => void;
-  deleteEntry: (path: string) => void;
-}): CommandDefinition[] {
-  const activeEditor = args.activePane?.type === "editor" ? args.activePane : null;
-  const selectedPath = args.selectedPath;
-  const contextFolder = selectedPath
-    ? args.selectedEntry?.kind === "file"
-      ? parentPath(selectedPath)
-      : selectedPath
-    : args.workspace.rootPath;
-  return [
-    {
-      id: "workspace.view.panes",
-      label: "Show Panes",
-      scope: "workspace",
-      group: "workspace",
-      enabled,
-      run: () => args.setView("panes"),
-    },
-    {
-      id: "workspace.view.canvas",
-      label: "Show Canvas",
-      scope: "workspace",
-      group: "workspace",
-      enabled,
-      run: () => args.setView("canvas"),
-    },
-    {
-      id: "workspace.refresh",
-      label: "Refresh Workspace",
-      scope: "workspace",
-      group: "workspace",
-      enabled,
-      run: args.refreshExplorer,
-    },
-    {
-      id: "pane.open.explorer",
-      label: "Open Explorer",
-      scope: "pane",
-      group: "pane",
-      enabled,
-      run: args.openExplorerPane,
-    },
-    {
-      id: "pane.open.terminal",
-      label: "Open Terminal",
-      scope: "pane",
-      group: "pane",
-      hint: contextFolder,
-      enabled,
-      run: () => args.openTerminalPane(contextFolder),
-    },
-    {
-      id: "pane.open.browser",
-      label: "Open Browser",
-      scope: "browser",
-      group: "browser",
-      enabled,
-      run: () => args.openBrowserPane("about:blank"),
-    },
-    {
-      id: "pane.open.repositories",
-      label: "Open Repositories",
-      scope: "git",
-      group: "git",
-      enabled,
-      run: () => args.openRepositoriesPane(),
-    },
-    {
-      id: "pane.open.source-control",
-      label: "Open Source Control",
-      scope: "git",
-      group: "git",
-      hint: args.repositories[0]?.relativePath,
-      enabled,
-      run: () => args.openSourceControlPane(args.repositories[0]?.rootPath ?? null),
-    },
-    {
-      id: "pane.open.settings",
-      label: "Open Settings",
-      scope: "workspace",
-      group: "workspace",
-      enabled,
-      run: () => args.openSettingsPane(),
-    },
-    {
-      id: "fs.open-file",
-      label: "Open in Editor",
-      scope: "filesystem",
-      group: "item",
-      hint: selectedPath ?? undefined,
-      enabled: () => (args.selectedEntry?.kind === "file" ? enabled() : disabled("select a file")),
-      run: () => {
-        if (selectedPath) void args.openEditorPane(selectedPath);
-      },
-    },
-    {
-      id: "fs.delete-entry",
-      label: args.selectedEntry?.kind === "dir" ? "Delete Folder" : "Delete File",
-      scope: "filesystem",
-      group: "item",
-      hint: selectedPath ?? undefined,
-      destructive: true,
-      enabled: () => (selectedPath ? enabled() : disabled("select an item")),
-      run: () => {
-        if (selectedPath) args.deleteEntry(selectedPath);
-      },
-    },
-    {
-      id: "new.folder",
-      label: "+ Subfolder",
-      scope: "filesystem",
-      group: "new",
-      hint: contextFolder,
-      enabled,
-      run: () => args.mkdir(contextFolder),
-    },
-    ...(["markdown", "json", "yaml", "typescript", "plain"] as const).map((kind) => ({
-      id: `new.file.${kind}`,
-      label: `+ File: ${kind}`,
-      scope: "filesystem" as const,
-      group: "new",
-      hint: contextFolder,
-      enabled,
-      run: () => args.createFile(contextFolder, kind),
-    })),
-    {
-      id: "pane.save-active",
-      label: "Save Active Editor",
-      scope: "pane",
-      group: "pane",
-      hint: activeEditor?.filePath,
-      enabled: () => (activeEditor ? enabled() : disabled("focus an editor")),
-      run: () => {
-        if (activeEditor) void args.saveEditorPane(activeEditor);
-      },
-    },
-    {
-      id: "pane.split-active",
-      label: "Split Active Pane Right",
-      scope: "pane",
-      group: "pane",
-      hint: args.activePane?.title,
-      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
-      run: () => {
-        if (args.activePane) args.splitPane(args.activePane.id);
-      },
-    },
-    {
-      id: "pane.split-active-vertical",
-      label: "Split Active Pane Down",
-      scope: "pane",
-      group: "pane",
-      hint: args.activePane?.title,
-      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
-      run: () => {
-        if (args.activePane) args.splitPane(args.activePane.id, "vertical");
-      },
-    },
-    {
-      id: "pane.tab-active",
-      label: "New Tab in Active Pane",
-      scope: "pane",
-      group: "pane",
-      hint: args.activePane?.title,
-      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
-      run: () => {
-        if (args.activePane) args.addPaneTab(args.activePane.id);
-      },
-    },
-    {
-      id: "pane.float-active",
-      label: "Float Active Pane",
-      scope: "pane",
-      group: "pane",
-      hint: args.activePane?.title,
-      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
-      run: () => {
-        if (args.activePane) args.setPanePlacement(args.activePane.id, "floating");
-      },
-    },
-    {
-      id: "pane.close-active",
-      label: "Close Active Pane",
-      scope: "pane",
-      group: "pane",
-      hint: args.activePane?.title,
-      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
-      run: () => {
-        if (args.activePane) args.closePane(args.activePane.id);
-      },
-    },
-  ];
-}
-
 function paneIcon(type: PaneType, className: string) {
   if (type === "explorer") return <Folder className={className} />;
   if (type === "editor") return <Code2 className={className} />;
@@ -1766,31 +1214,6 @@ function paneIcon(type: PaneType, className: string) {
 
 function dispatchTerminalInput(paneId: string, input: string): void {
   window.dispatchEvent(new CustomEvent(TERMINAL_INPUT_EVENT, { detail: { paneId, input } }));
-}
-
-function findEntry(fileTrees: Map<string, FsEntry[]>, path: string): FsEntry | null {
-  const parent = parentPath(path);
-  return fileTrees.get(parent)?.find((entry) => entry.path === path) ?? null;
-}
-
-function joinPath(parent: string, name: string): string {
-  if (parent === "/" || parent === "") return `/${name}`;
-  return `${parent}/${name}`;
-}
-
-function parentPath(absPath: string): string {
-  if (!absPath || absPath === "/") return "/";
-  const idx = absPath.lastIndexOf("/");
-  if (idx <= 0) return "/";
-  return absPath.slice(0, idx);
-}
-
-function extensionForKind(kind: "markdown" | "json" | "yaml" | "typescript" | "plain"): string {
-  if (kind === "markdown") return "md";
-  if (kind === "typescript") return "ts";
-  if (kind === "yaml") return "yaml";
-  if (kind === "json") return "json";
-  return "txt";
 }
 
 function nowIso(): string {
