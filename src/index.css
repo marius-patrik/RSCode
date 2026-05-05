@@ -122,28 +122,6 @@ select {
   background: transparent !important;
 }
 
-.glass {
-  background: var(--secondary);
-  border: 1px solid var(--border);
-  box-shadow: none;
-}
-
-.glass:hover {
-  background: var(--surface-hover);
-}
-
-.glass-heavy {
-  background: var(--background);
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-}
-
-.glass-chip {
-  background: var(--secondary);
-  border: 1px solid var(--border);
-  box-shadow: none;
-}
-
 svg {
   stroke: currentColor;
 }

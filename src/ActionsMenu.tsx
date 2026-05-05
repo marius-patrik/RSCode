@@ -94,10 +94,10 @@ export function ActionsMenu({
     <div
       data-context-menu
       style={{ left, top }}
-      className="glass-heavy fixed z-50 flex w-[280px] max-h-[480px] flex-col overflow-hidden rounded-xl border border-white/10 shadow-2xl backdrop-blur-xl"
+      className="fixed z-50 flex w-[280px] max-h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div className="flex items-center gap-1.5 border-b border-white/10 bg-black/30 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">
+      <div className="flex items-center gap-1.5 border-b border-border bg-secondary px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">
         {title}
       </div>
       <input
@@ -124,7 +124,7 @@ export function ActionsMenu({
         }}
         placeholder="filter…"
         spellCheck={false}
-        className="w-full border-b border-white/10 bg-transparent px-3 py-2 font-mono text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+        className="w-full border-b border-border bg-transparent px-3 py-2 font-mono text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
       />
       <div className="flex-1 overflow-y-auto py-1">
         {visible.length === 0 ? (
