@@ -1,7 +1,7 @@
-import { type ActionGroup, ActionsMenu } from "@/ActionsMenu.tsx";
-import { MonacoEditor, languageForFile } from "@/MonacoEditor.tsx";
-import { TerminalNodeView } from "@/TerminalNode.tsx";
-import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/commands.ts";
+import { type ActionGroup, ActionsMenu } from "@/client/ActionsMenu";
+import { MonacoEditor, languageForFile } from "@/client/MonacoEditor";
+import { TerminalNodeView } from "@/client/TerminalNode";
+import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/server/commands";
 import type {
   BrowserPaneState,
   EditorPaneState,
@@ -16,8 +16,8 @@ import type {
   SourceControlPaneState,
   TiledLayoutNode,
   Workspace,
-} from "@/schema.ts";
-import { cn } from "@/utils.ts";
+} from "@/shared/schema";
+import { cn } from "@/shared/utils";
 import {
   ChevronDown,
   ChevronRight,
@@ -1142,6 +1142,7 @@ function BrowserPane({
   const [frame, setFrame] = useState<string | null>(null);
   const [renderer, setRenderer] = useState<string>("connecting");
   const wsRef = useRef<WebSocket | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => setAddress(pane.url), [pane.url]);
 
@@ -1171,6 +1172,11 @@ function BrowserPane({
     }
   }, [pane.url]);
 
+  const sendBrowserMessage = useCallback((payload: Record<string, unknown>) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify(payload));
+  }, []);
+
   const navigate = async () => {
     const next = address.trim() || "about:blank";
     await onBrowserNavigate(workspaceId, pane.id, next);
@@ -1199,17 +1205,52 @@ function BrowserPane({
           <ChevronRight className="h-4 w-4" />
         </button>
       </form>
-      <div className="relative min-h-0 flex-1 bg-background">
+      <div
+        tabIndex={0}
+        className="relative min-h-0 flex-1 bg-background outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+        onMouseDown={(event) => {
+          const point = browserFramePoint(event, imageRef.current);
+          if (!point) return;
+          event.currentTarget.focus();
+          event.preventDefault();
+          sendBrowserMessage({ type: "click", ...point, button: browserButton(event.button) });
+        }}
+        onWheel={(event) => {
+          const point = browserFramePoint(event, imageRef.current);
+          if (!point) return;
+          event.preventDefault();
+          sendBrowserMessage({
+            type: "wheel",
+            ...point,
+            deltaX: event.deltaX,
+            deltaY: event.deltaY,
+          });
+        }}
+        onKeyDown={(event) => {
+          const message = browserKeyMessage(event);
+          if (!message) return;
+          event.preventDefault();
+          sendBrowserMessage(message);
+        }}
+      >
         {frame ? (
-          <img src={frame} alt={pane.url} className="h-full w-full object-contain bg-background" draggable={false} />
+          <img
+            ref={imageRef}
+            src={frame}
+            alt={pane.url}
+            className="h-full w-full select-none object-contain bg-background"
+            draggable={false}
+          />
         ) : (
           <div className="flex h-full items-center justify-center bg-background font-mono text-xs text-muted-foreground">
             waiting for frame
           </div>
         )}
-        <div className="absolute bottom-2 right-2 rounded border border-border bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
-          {renderer}
-        </div>
+        {renderer !== "chromium" ? (
+          <div className="absolute bottom-2 right-2 rounded border border-border bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+            {renderer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -2059,6 +2100,57 @@ function matches(query: string, target: string): boolean {
     i = found + 1;
   }
   return true;
+}
+
+function browserFramePoint(event: { clientX: number; clientY: number }, image: HTMLImageElement | null): { x: number; y: number } | null {
+  if (!image) return null;
+  const rect = image.getBoundingClientRect();
+  const naturalWidth = image.naturalWidth || 1280;
+  const naturalHeight = image.naturalHeight || 720;
+  const imageAspect = naturalWidth / naturalHeight;
+  const boxAspect = rect.width / rect.height;
+  let drawWidth = rect.width;
+  let drawHeight = rect.height;
+  let offsetX = 0;
+  let offsetY = 0;
+  if (boxAspect > imageAspect) {
+    drawWidth = rect.height * imageAspect;
+    offsetX = (rect.width - drawWidth) / 2;
+  } else {
+    drawHeight = rect.width / imageAspect;
+    offsetY = (rect.height - drawHeight) / 2;
+  }
+  const localX = event.clientX - rect.left - offsetX;
+  const localY = event.clientY - rect.top - offsetY;
+  if (localX < 0 || localY < 0 || localX > drawWidth || localY > drawHeight) return null;
+  return {
+    x: Math.round(clamp((localX / drawWidth) * naturalWidth, 0, naturalWidth)),
+    y: Math.round(clamp((localY / drawHeight) * naturalHeight, 0, naturalHeight)),
+  };
+}
+
+function browserButton(button: number): "left" | "middle" | "right" {
+  if (button === 1) return "middle";
+  if (button === 2) return "right";
+  return "left";
+}
+
+function browserKeyMessage(event: {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+}): { type: "key"; key: string } | { type: "type"; text: string } | null {
+  if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    return { type: "type", text: event.key };
+  }
+  const key = event.key === " " ? "Space" : event.key;
+  const modifier = event.metaKey ? "Meta" : event.ctrlKey ? "Control" : event.altKey ? "Alt" : "";
+  return { type: "key", key: modifier ? `${modifier}+${key}` : key };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function nowIso(): string {

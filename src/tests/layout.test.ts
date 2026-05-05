@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { DEFAULT_FOLDER_LIMIT, layoutVisibleTree } from "@/layout.ts";
-import type { FsEntry } from "@/schema.ts";
+import { DEFAULT_FOLDER_LIMIT, layoutVisibleTree } from "@/server/layout";
+import type { FsEntry } from "@/shared/schema";
 
 test("large expanded folders are capped and get a load-more node", () => {
   const root = "/workspace";

@@ -1,4 +1,4 @@
-import { workspaceSchema } from "@/schema.ts";
+import { workspaceSchema } from "@/shared/schema";
 import {
   createFsFile,
   deleteFsEntry,
@@ -6,8 +6,8 @@ import {
   mkdirFs,
   readFsFile,
   writeFsFile,
-} from "@/store.ts";
-import type { CanvasStore } from "@/store.ts";
+} from "@/server/store";
+import type { CanvasStore } from "@/server/store";
 import { z } from "zod";
 
 export type AppContext = { store: CanvasStore };

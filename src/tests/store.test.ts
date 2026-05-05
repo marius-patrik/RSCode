@@ -2,10 +2,10 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lookupHandler } from "@/api.ts";
-import type { AppContext } from "@/api.ts";
-import type { Workspace } from "@/schema.ts";
-import { CanvasStore } from "@/store.ts";
+import { lookupHandler } from "@/server/api";
+import type { AppContext } from "@/server/api";
+import type { Workspace } from "@/shared/schema";
+import { CanvasStore } from "@/server/store";
 
 let canvasHome = "";
 

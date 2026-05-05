@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
-import { getPaths, getServicePort, getServiceUrl } from "@/paths.ts";
+import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
 import {
   type BrowserPaneState,
   type BrowserSession,
@@ -22,7 +22,7 @@ import {
   defaultViewport,
   workspaceIndexSchema,
   workspaceSchema,
-} from "@/schema.ts";
+} from "@/shared/schema";
 
 const MAX_READ_BYTES = 1_000_000;
 const DEFAULT_GIT_DISCOVERY_DEPTH = 5;

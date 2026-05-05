@@ -1,3 +1,4 @@
+import type { IDisposable, ITheme, Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 
 // xterm.js terminal hosted inside a workspace pane. Lazy-imports the
@@ -12,9 +13,10 @@ export function TerminalNodeView({ cwd }: { cwd: string }) {
 
   useEffect(() => {
     let disposed = false;
-    let term: { dispose: () => void; write: (data: string | Uint8Array) => void; onData: (handler: (data: string) => void) => { dispose: () => void } } | null = null;
-    let dataDisposable: { dispose: () => void } | null = null;
+    let term: XTerm | null = null;
+    let dataDisposable: IDisposable | null = null;
     let resizeObs: ResizeObserver | null = null;
+    let themeObs: MutationObserver | null = null;
 
     void (async () => {
       const { Terminal } = await import("@xterm/xterm");
@@ -27,19 +29,21 @@ export function TerminalNodeView({ cwd }: { cwd: string }) {
       const t = new Terminal({
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         fontSize: 12,
+        allowTransparency: true,
         cursorBlink: true,
         convertEol: true,
-        theme: {
-          background: "#1e1e1e",
-          foreground: "#d4d4d4",
-          cursor: "#d4d4d4",
-        },
+        theme: terminalTheme(),
       });
       const fit = new FitAddon();
       t.loadAddon(fit);
       t.open(containerRef.current);
       fit.fit();
-      term = t as unknown as typeof term;
+      term = t;
+
+      themeObs = new MutationObserver(() => {
+        t.options.theme = terminalTheme();
+      });
+      themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
 
       const url = new URL("/api/terminal/spawn", window.location.origin);
       url.searchParams.set("cwd", cwd);
@@ -63,9 +67,7 @@ export function TerminalNodeView({ cwd }: { cwd: string }) {
         if (ws.readyState === WebSocket.OPEN) ws.send(data);
       });
 
-      resizeObs = new ResizeObserver(() => {
-        try { fit.fit(); } catch { /* */ }
-      });
+      resizeObs = new ResizeObserver(() => fit.fit());
       resizeObs.observe(containerRef.current);
     })();
 
@@ -73,6 +75,7 @@ export function TerminalNodeView({ cwd }: { cwd: string }) {
       disposed = true;
       try { dataDisposable?.dispose(); } catch { /* */ }
       try { resizeObs?.disconnect(); } catch { /* */ }
+      try { themeObs?.disconnect(); } catch { /* */ }
       try { wsRef.current?.close(); } catch { /* */ }
       try { term?.dispose(); } catch { /* */ }
     };
@@ -87,4 +90,34 @@ export function TerminalNodeView({ cwd }: { cwd: string }) {
       onWheel={(e) => e.stopPropagation()}
     />
   );
+}
+
+function terminalTheme(): ITheme {
+  const styles = getComputedStyle(document.documentElement);
+  const foreground = styles.getPropertyValue("--foreground").trim() || "#ffffff";
+  const muted = styles.getPropertyValue("--muted-foreground").trim() || "#9b9b9b";
+  const surface = styles.getPropertyValue("--surface-hover").trim() || "rgba(255, 255, 255, 0.12)";
+  return {
+    background: "#00000000",
+    foreground,
+    cursor: foreground,
+    cursorAccent: styles.getPropertyValue("--background").trim() || "#000000",
+    selectionBackground: surface,
+    black: foreground,
+    red: foreground,
+    green: foreground,
+    yellow: foreground,
+    blue: foreground,
+    magenta: foreground,
+    cyan: foreground,
+    white: foreground,
+    brightBlack: muted,
+    brightRed: foreground,
+    brightGreen: foreground,
+    brightYellow: foreground,
+    brightBlue: foreground,
+    brightMagenta: foreground,
+    brightCyan: foreground,
+    brightWhite: foreground,
+  };
 }

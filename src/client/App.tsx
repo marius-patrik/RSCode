@@ -1,8 +1,8 @@
-import type { ActionGroup } from "@/ActionsMenu.tsx";
-import { Canvas, type FsEntry } from "@/Canvas.tsx";
-import { Dock } from "@/Dock.tsx";
-import { makeClient } from "@/client.ts";
-import type { GitDiff, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/schema.ts";
+import type { ActionGroup } from "@/client/ActionsMenu";
+import { Canvas, type FsEntry } from "@/client/Canvas";
+import { Dock } from "@/client/Dock";
+import { makeClient } from "@/client/client";
+import type { GitDiff, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/shared/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type CanvasMountProps = {

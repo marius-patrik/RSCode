@@ -1,7 +1,7 @@
-import type { ActionGroup, ActionItem } from "@/ActionsMenu.tsx";
-import { CommandPopover, flattenGroups } from "@/CommandPopover.tsx";
-import type { WorkspaceSummary } from "@/schema.ts";
-import { cn } from "@/utils.ts";
+import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
+import { CommandPopover, flattenGroups } from "@/client/CommandPopover";
+import type { WorkspaceSummary } from "@/shared/schema";
+import { cn } from "@/shared/utils";
 import {
   Columns2,
   Folder,

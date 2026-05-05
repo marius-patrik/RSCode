@@ -1,4 +1,4 @@
-import type { FsEntry } from "@/schema.ts";
+import type { FsEntry } from "@/shared/schema";
 
 export const TREE_NODE_WIDTH = 240;
 export const TREE_NODE_HEIGHT = 86;

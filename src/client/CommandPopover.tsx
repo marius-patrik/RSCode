@@ -1,5 +1,5 @@
-import type { ActionGroup } from "@/ActionsMenu.tsx";
-import { cn } from "@/utils.ts";
+import type { ActionGroup } from "@/client/ActionsMenu";
+import { cn } from "@/shared/utils";
 import { useEffect, useMemo } from "react";
 
 // Action popover anchored to the dock command input. Mirrors

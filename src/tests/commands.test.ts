@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type CommandDefinition, commandGroupsFor, disabled, enabled, runCommand } from "@/commands.ts";
+import { type CommandDefinition, commandGroupsFor, disabled, enabled, runCommand } from "@/server/commands";
 
 test("command registry surfaces disabled reasons and prevents disabled execution", () => {
   let ran = false;

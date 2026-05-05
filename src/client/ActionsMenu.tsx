@@ -1,4 +1,4 @@
-import { cn } from "@/utils.ts";
+import { cn } from "@/shared/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 // UE5-style searchable, categorised right-click menu. Replaces the old

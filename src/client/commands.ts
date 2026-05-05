@@ -1,4 +1,4 @@
-import type { ActionGroup, ActionItem } from "@/ActionsMenu.tsx";
+import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
 
 export type CommandScope =
   | "global"

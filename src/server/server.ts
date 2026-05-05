@@ -1,10 +1,10 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { type AppContext, lookupHandler } from "@/api.ts";
-import { BrowserFrameService } from "@/browserService.ts";
-import { getPaths, getServicePort, getServiceUrl } from "@/paths.ts";
-import { serveWebAsset } from "@/static.ts";
-import { CanvasStore } from "@/store.ts";
+import { type AppContext, lookupHandler } from "@/server/api";
+import { type BrowserInteractionMessage, BrowserFrameService } from "@/server/browserService";
+import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
+import { serveWebAsset } from "@/server/static";
+import { CanvasStore } from "@/server/store";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -93,7 +93,7 @@ export async function startServer() {
   );
   await logLine(paths.serviceLogFile, `[${new Date().toISOString()}] service boot pid=${process.pid}`);
 
-  const distRoot = resolve(import.meta.dir, "..", "dist", "web");
+  const distRoot = resolve(import.meta.dir, "..", "..", "dist", "web");
 
   type TerminalSession = { cwd: string; buffer: string; queue: Promise<void> };
   const terminals = new WeakMap<object, TerminalSession>();
@@ -191,6 +191,7 @@ export async function startServer() {
     if (shuttingDown) return;
     shuttingDown = true;
     await logLine(paths.serviceLogFile, `[${new Date().toISOString()}] shutdown ${signal}`);
+    await browserFrames.close();
     server.stop(true);
     process.exit(0);
   }
@@ -240,8 +241,38 @@ export async function startServer() {
         url: command.url,
       });
     }
+    if (isBrowserInteractionMessage(command) && browserFrames.renderer() === "chromium") {
+      try {
+        const session = await store.getBrowserSession(ws.data.workspaceId, ws.data.paneId);
+        const frame = await browserFrames.interact(session, command);
+        ws.send(JSON.stringify(await browserFrames.stateFor(session)));
+        ws.send(JSON.stringify(frame));
+        return;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        ws.send(JSON.stringify({ type: "error", message: errorMessage }));
+      }
+    }
     await sendBrowserStateAndFrame(ws, ws.data.workspaceId, ws.data.paneId);
   }
+}
+
+function isBrowserInteractionMessage(command: Record<string, unknown>): command is BrowserInteractionMessage {
+  if (command.type === "reload") return command.url === undefined || typeof command.url === "string";
+  if (command.type === "click") {
+    return typeof command.x === "number" && typeof command.y === "number";
+  }
+  if (command.type === "wheel") {
+    return (
+      typeof command.x === "number" &&
+      typeof command.y === "number" &&
+      typeof command.deltaX === "number" &&
+      typeof command.deltaY === "number"
+    );
+  }
+  if (command.type === "key") return typeof command.key === "string";
+  if (command.type === "type") return typeof command.text === "string";
+  return false;
 }
 
 function bufferSourceToBytes(source: BufferSource): Uint8Array {

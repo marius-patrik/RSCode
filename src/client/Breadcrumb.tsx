@@ -1,4 +1,4 @@
-import { cn } from "@/utils.ts";
+import { cn } from "@/shared/utils";
 import { ChevronRight } from "lucide-react";
 import { Fragment } from "react";
 
