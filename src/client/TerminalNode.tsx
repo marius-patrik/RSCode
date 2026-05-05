@@ -7,7 +7,9 @@ import { useEffect, useRef } from "react";
 // at the requested cwd, pipes stdout/stderr → ws.send and ws.message →
 // proc.stdin. No PTY (vim/htop won't render perfectly).
 
-export function TerminalNodeView({ cwd }: { cwd: string }) {
+export const TERMINAL_INPUT_EVENT = "canvas:terminal-input";
+
+export function TerminalNodeView({ cwd, paneId }: { cwd: string; paneId: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -80,6 +82,18 @@ export function TerminalNodeView({ cwd }: { cwd: string }) {
       try { term?.dispose(); } catch { /* */ }
     };
   }, [cwd]);
+
+  useEffect(() => {
+    function handleInput(event: Event) {
+      const detail = (event as CustomEvent<{ paneId: string; input: string }>).detail;
+      if (detail?.paneId !== paneId) return;
+      const ws = wsRef.current;
+      if (ws?.readyState !== WebSocket.OPEN) return;
+      ws.send(`${detail.input}\n`);
+    }
+    window.addEventListener(TERMINAL_INPUT_EVENT, handleInput);
+    return () => window.removeEventListener(TERMINAL_INPUT_EVENT, handleInput);
+  }, [paneId]);
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: terminal swallows its own keys; the click handler just blocks canvas-level pan/expand

@@ -1,6 +1,6 @@
 import { type ActionGroup, ActionsMenu } from "@/client/ActionsMenu";
 import { MonacoEditor, languageForFile } from "@/client/MonacoEditor";
-import { TerminalNodeView } from "@/client/TerminalNode";
+import { TERMINAL_INPUT_EVENT, TerminalNodeView } from "@/client/TerminalNode";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/client/commands";
 import { urlForLauncherQuery } from "@/client/launcher";
 import type {
@@ -15,6 +15,7 @@ import type {
   PaneType,
   SettingsPaneState,
   SourceControlPaneState,
+  TerminalPaneState,
   TiledLayoutNode,
   Workspace,
   WorkspaceSettings,
@@ -36,7 +37,6 @@ import {
   Maximize2,
   PanelLeft,
   Plus,
-  RefreshCw,
   Rows2,
   Save,
   Settings,
@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  type DragEvent as ReactDragEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -100,6 +101,7 @@ type ModalRequest =
 
 const MIN_PANE_WIDTH = 300;
 const MIN_PANE_HEIGHT = 220;
+const PANE_TAB_MIME = "application/x-canvas-pane-tab";
 
 export function Canvas({
   workspace: incomingWorkspace,
@@ -308,7 +310,7 @@ export function Canvas({
   const addPaneTab = useCallback(
     (paneId: string) => {
       const pane = workspace.panes.find((candidate) => candidate.id === paneId);
-      if (!pane) return;
+      if (!pane || pane.placement !== "tiled") return;
       const clone = clonePaneForSplit(pane, workspace.panes);
       updateWorkspace({
         panes: [...workspace.panes, clone],
@@ -317,6 +319,39 @@ export function Canvas({
       });
     },
     [updateWorkspace, workspace.panes, workspace.tiledLayout],
+  );
+
+  const movePaneTab = useCallback(
+    (sourcePaneId: string, targetPaneId: string, targetPlacement: PaneState["placement"]) => {
+      if (sourcePaneId === targetPaneId) return;
+      const sourcePane = workspace.panes.find((candidate) => candidate.id === sourcePaneId);
+      const targetPane = workspace.panes.find((candidate) => candidate.id === targetPaneId);
+      if (!sourcePane || !targetPane) return;
+      const nextPlacement = targetPlacement;
+      const topZ = maxPaneZ(workspace.panes) + 1;
+      const nextPanes = workspace.panes.map((pane) => {
+        if (pane.id !== sourcePane.id) return pane;
+        const rect = nextPlacement === "tiled" ? pane.rect : offsetDropRect(targetPane.rect, pane.rect);
+        return {
+          ...pane,
+          placement: nextPlacement,
+          rect,
+          z: nextPlacement === "tiled" ? pane.z : topZ,
+          updatedAt: nowIso(),
+        };
+      });
+      const tiledLayout =
+        nextPlacement === "tiled"
+          ? addPaneToLayoutTab(removePaneFromLayout(workspace.tiledLayout, sourcePane.id), targetPane.id, sourcePane.id)
+          : removePaneFromLayout(workspace.tiledLayout, sourcePane.id);
+      updateWorkspace({
+        panes: nextPanes,
+        tiledLayout,
+        activePaneId: sourcePane.id,
+        activeView: nextPlacement === "canvas" ? "canvas" : workspace.activeView,
+      });
+    },
+    [updateWorkspace, workspace.activeView, workspace.panes, workspace.tiledLayout],
   );
 
   const updateSettings = useCallback(
@@ -558,6 +593,7 @@ export function Canvas({
             onClosePane={closePane}
             onSplitPane={splitPane}
             onAddPaneTab={addPaneTab}
+            onMovePaneTab={movePaneTab}
             onSetPanePlacement={setPanePlacement}
             onUpdateSettings={updateSettings}
             onUpdateSplitRatio={updateSplitRatio}
@@ -586,6 +622,7 @@ export function Canvas({
             onClosePane={closePane}
             onSplitPane={splitPane}
             onAddPaneTab={addPaneTab}
+            onMovePaneTab={movePaneTab}
             onSetPanePlacement={setPanePlacement}
             onUpdateSettings={updateSettings}
             onOpenEditor={openEditorPane}
@@ -614,6 +651,7 @@ export function Canvas({
           onClosePane={closePane}
           onSplitPane={splitPane}
           onAddPaneTab={addPaneTab}
+          onMovePaneTab={movePaneTab}
           onSetPanePlacement={setPanePlacement}
           onUpdateSettings={updateSettings}
           onOpenEditor={openEditorPane}
@@ -743,6 +781,7 @@ type PaneRenderProps = {
   onClosePane: (paneId: string) => void;
   onSplitPane: (paneId: string, direction?: "horizontal" | "vertical") => void;
   onAddPaneTab: (paneId: string) => void;
+  onMovePaneTab: (sourcePaneId: string, targetPaneId: string, targetPlacement: PaneState["placement"]) => void;
   onSetPanePlacement: (paneId: string, placement: PaneState["placement"]) => void;
   onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
   onOpenEditor: (path: string, placement?: PaneState["placement"]) => Promise<void>;
@@ -784,6 +823,7 @@ function CanvasWorkspace({ panes, ...props }: PaneRenderProps & { panes: PaneSta
 function FreeformPane({
   pane,
   placement,
+  workspace,
   onFocusPane,
   onUpdatePane,
   ...props
@@ -843,6 +883,8 @@ function FreeformPane({
         pane={pane}
         active={pane.id === props.activePaneId}
         mode={placement}
+        tabs={workspace.settings.tabbedPanes ? [pane] : undefined}
+        workspace={workspace}
         onFocusPane={onFocusPane}
         onUpdatePane={onUpdatePane}
         dragHandleProps={{
@@ -898,6 +940,7 @@ function PaneFrame({
   onClosePane,
   onSplitPane,
   onAddPaneTab,
+  onMovePaneTab,
   onSetPanePlacement,
   onUpdateSettings,
   onOpenEditor,
@@ -918,7 +961,18 @@ function PaneFrame({
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   };
 }) {
-  const showTabs = mode === "tiled" && tabs && tabs.length > 1;
+  const showTabs = workspace.settings.tabbedPanes && tabs && tabs.length > 0;
+  const handleTabDragOver = (event: ReactDragEvent<HTMLElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes(PANE_TAB_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+  const handleTabDrop = (event: ReactDragEvent<HTMLElement>) => {
+    const sourcePaneId = event.dataTransfer.getData(PANE_TAB_MIME);
+    if (!sourcePaneId || sourcePaneId === pane.id) return;
+    event.preventDefault();
+    onMovePaneTab(sourcePaneId, pane.id, mode);
+  };
   return (
     <section
       className={cn(
@@ -927,6 +981,8 @@ function PaneFrame({
         mode === "tiled" && "h-full",
       )}
       onPointerDown={() => onFocusPane(pane.id)}
+      onDragOver={handleTabDragOver}
+      onDrop={handleTabDrop}
     >
       <header
         className={cn(
@@ -977,8 +1033,15 @@ function PaneFrame({
               <div
                 key={tab.id}
                 title={tab.title}
+                draggable
+                onDragStart={(event) => {
+                  event.stopPropagation();
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData(PANE_TAB_MIME, tab.id);
+                  event.dataTransfer.setData("text/plain", tab.title);
+                }}
                 className={cn(
-                  "flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs",
+                  "flex h-7 min-w-0 max-w-[180px] cursor-grab items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs active:cursor-grabbing",
                   selected ? "border-border bg-secondary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -1018,7 +1081,7 @@ function PaneFrame({
           />
         ) : null}
         {pane.type === "editor" ? <EditorPane pane={pane} onUpdatePane={onUpdatePane} onSaveEditor={onSaveEditor} /> : null}
-        {pane.type === "terminal" ? <TerminalPane cwd={pane.cwd} /> : null}
+        {pane.type === "terminal" ? <TerminalPane pane={pane} /> : null}
         {pane.type === "browser" ? (
           <BrowserPane workspaceId={workspace.id} pane={pane} onBrowserNavigate={onBrowserNavigate} />
         ) : null}
@@ -1103,9 +1166,6 @@ function ExplorerPane({
         <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">{pane.folderPath}</span>
         <HeaderButton title="Terminal here" onClick={() => onOpenTerminal(pane.folderPath)}>
           <TerminalIcon className="h-3.5 w-3.5" />
-        </HeaderButton>
-        <HeaderButton title="Refresh" onClick={() => onRequestTree(pane.folderPath)}>
-          <RefreshCw className="h-3.5 w-3.5" />
         </HeaderButton>
       </div>
       <div className="min-h-0 flex-1 overflow-auto py-1">
@@ -1242,10 +1302,10 @@ function EditorPane({
   );
 }
 
-function TerminalPane({ cwd }: { cwd: string }) {
+function TerminalPane({ pane }: { pane: TerminalPaneState }) {
   return (
     <div className="h-full p-2">
-      <TerminalNodeView cwd={cwd} />
+      <TerminalNodeView cwd={pane.cwd} paneId={pane.id} />
     </div>
   );
 }
@@ -1434,14 +1494,6 @@ function SourceControlPane({
           ))}
           {!repositories.some((repo) => repo.rootPath === repoPath) ? <option value={repoPath}>{repoPath}</option> : null}
         </select>
-        <button
-          type="button"
-          title="Refresh"
-          onClick={() => void onRequestGitStatus(repoPath)}
-          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(180px,34%)_1fr]">
         <div className="min-h-0 overflow-auto border-r border-border">
@@ -1497,14 +1549,6 @@ function RepositoriesPane({
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-2">
         <FolderGit2 className="h-4 w-4" />
         <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">{pane.rootPath}</span>
-        <button
-          type="button"
-          title="Refresh"
-          onClick={() => onRequestRepositories(pane.rootPath)}
-          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto py-1">
         {repositories.length === 0 ? (
@@ -2153,6 +2197,15 @@ function clampRect(rect: PaneRect): PaneRect {
   };
 }
 
+function offsetDropRect(target: PaneRect, source: PaneRect): PaneRect {
+  return clampRect({
+    x: target.x + 28,
+    y: target.y + 28,
+    width: source.width,
+    height: source.height,
+  });
+}
+
 function maxPaneZ(panes: PaneState[]): number {
   return panes.reduce((max, pane) => Math.max(max, pane.z), 0);
 }
@@ -2304,19 +2357,13 @@ function firstPaneIdInLayout(layout: TiledLayoutNode | null): string | null {
   return firstPaneIdInLayout(layout.first) ?? firstPaneIdInLayout(layout.second);
 }
 
+function dispatchTerminalInput(paneId: string, input: string): void {
+  window.dispatchEvent(new CustomEvent(TERMINAL_INPUT_EVENT, { detail: { paneId, input } }));
+}
+
 function findEntry(fileTrees: Map<string, FsEntry[]>, path: string): FsEntry | null {
   const parent = parentPath(path);
   return fileTrees.get(parent)?.find((entry) => entry.path === path) ?? null;
-}
-
-function detailForPane(pane: PaneState): string {
-  if (pane.type === "editor") return pane.filePath;
-  if (pane.type === "terminal") return pane.cwd;
-  if (pane.type === "browser") return pane.url;
-  if (pane.type === "explorer") return pane.folderPath;
-  if (pane.type === "sourceControl") return pane.repoPath ?? "workspace";
-  if (pane.type === "settings") return "workspace settings";
-  return pane.rootPath;
 }
 
 function joinPath(parent: string, name: string): string {
@@ -2337,17 +2384,6 @@ function extensionForKind(kind: "markdown" | "json" | "yaml" | "typescript" | "p
   if (kind === "yaml") return "yaml";
   if (kind === "json") return "json";
   return "txt";
-}
-
-function matches(query: string, target: string): boolean {
-  const text = target.toLowerCase();
-  let i = 0;
-  for (const ch of query) {
-    const found = text.indexOf(ch, i);
-    if (found === -1) return false;
-    i = found + 1;
-  }
-  return true;
 }
 
 function browserFramePoint(event: { clientX: number; clientY: number }, image: HTMLImageElement | null): { x: number; y: number } | null {

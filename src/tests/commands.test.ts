@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { workspaceForCurrentView, workspaceForEntry } from "@/client/App";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled, runCommand } from "@/client/commands";
 import { urlForLauncherQuery } from "@/client/launcher";
-import type { Workspace } from "@/shared/schema";
+import { DEFAULT_WORKSPACE_SETTINGS, type Workspace } from "@/shared/schema";
 
 test("command registry surfaces disabled reasons and prevents disabled execution", () => {
   let ran = false;
@@ -49,12 +49,12 @@ test("launcher input resolves URLs and web searches", () => {
 test("workspace entry applies default view without clobbering current view updates", () => {
   const workspace = makeWorkspaceFixture({
     activeView: "panes",
-    settings: { theme: "dark", defaultView: "canvas", tabbedPanes: true },
+    settings: { ...DEFAULT_WORKSPACE_SETTINGS, defaultView: "canvas" },
   });
   const current = makeWorkspaceFixture({
     id: workspace.id,
     activeView: "panes",
-    settings: { theme: "dark", defaultView: "canvas", tabbedPanes: true },
+    settings: { ...DEFAULT_WORKSPACE_SETTINGS, defaultView: "canvas" },
   });
 
   expect(workspaceForEntry(workspace).activeView).toBe("canvas");
@@ -68,7 +68,7 @@ function makeWorkspaceFixture(overrides: Partial<Workspace> = {}): Workspace {
     label: "Test",
     rootPath: process.cwd(),
     activeView: "panes",
-    settings: { theme: "dark", defaultView: "panes", tabbedPanes: true },
+    settings: DEFAULT_WORKSPACE_SETTINGS,
     panes: [],
     tiledLayout: null,
     canvasViewport: { x: 0, y: 0, zoom: 1 },

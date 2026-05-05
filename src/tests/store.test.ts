@@ -160,7 +160,7 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
 
   const saved = await store.saveWorkspace({
     ...workspace,
-    settings: { theme: "light", defaultView: "canvas", tabbedPanes: false },
+    settings: { theme: "light", defaultView: "canvas", backgroundStyle: "dot", accentColor: "blue", tabbedPanes: false },
     panes: [...workspace.panes, editorOne, editorTwo],
     tiledLayout: {
       type: "leaf",
@@ -171,7 +171,13 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
     activePaneId: editorTwo.id,
   });
 
-  expect(saved.settings).toEqual({ theme: "light", defaultView: "canvas", tabbedPanes: false });
+  expect(saved.settings).toEqual({
+    theme: "light",
+    defaultView: "canvas",
+    backgroundStyle: "dot",
+    accentColor: "blue",
+    tabbedPanes: false,
+  });
   expect(saved.tiledLayout?.type).toBe("leaf");
   if (saved.tiledLayout?.type === "leaf") {
     expect(saved.tiledLayout.paneIds).toEqual([explorerId, editorOne.id, editorTwo.id]);
