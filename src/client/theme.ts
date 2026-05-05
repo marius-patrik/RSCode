@@ -72,8 +72,11 @@ export function resolveWorkspaceTheme(settings: WorkspaceSettings | undefined | 
 export function applyWorkspaceTheme(theme: WorkspaceThemeDefinition): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  root.dataset.themeMode = theme.mode;
   root.classList.toggle("dark", theme.mode === "dark");
+  root.dataset.theme = theme.id;
+  delete root.dataset.accent;
+  root.style.colorScheme = theme.mode;
+  window.localStorage.setItem("canvas-theme", theme.id);
   for (const [key, cssVariable] of THEME_CSS_VARIABLES) {
     root.style.setProperty(cssVariable, theme.colors[key]);
   }

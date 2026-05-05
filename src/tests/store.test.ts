@@ -161,6 +161,39 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
   }
 });
 
+test("persists settings panes as workspace pane state", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const workspace = await store.getActiveWorkspace();
+  const explorerId = workspace.panes[0]!.id;
+  const now = new Date().toISOString();
+  const settingsPane = {
+    id: "settings:test",
+    type: "settings" as const,
+    title: "Settings",
+    placement: "tiled" as const,
+    rect: { x: 20, y: 30, width: 720, height: 480 },
+    z: 2,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const saved = await store.saveWorkspace({
+    ...workspace,
+    panes: [...workspace.panes, settingsPane],
+    tiledLayout: {
+      type: "leaf",
+      paneId: settingsPane.id,
+      paneIds: [explorerId, settingsPane.id],
+      activePaneId: settingsPane.id,
+    },
+    activePaneId: settingsPane.id,
+  });
+
+  expect(saved.panes.some((pane) => pane.type === "settings")).toBe(true);
+  expect((await store.getWorkspace(workspace.id)).panes.some((pane) => pane.type === "settings")).toBe(true);
+});
+
 test("workspace API handlers expose list, create, save, and close contracts", async () => {
   const store = new CanvasStore();
   await store.ensureInitialized();

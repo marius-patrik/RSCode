@@ -1,20 +1,10 @@
 import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
-import { Canvas, type FsEntry } from "@/client/Canvas";
+import { Canvas } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
 import { urlForLauncherQuery } from "@/client/launcher";
-import {
-  BUILTIN_WORKSPACE_THEMES,
-  DEFAULT_THEME_COLORS,
-  DEFAULT_WORKSPACE_SETTINGS,
-  type GitRepository,
-  type GitStatus,
-  type Workspace,
-  type WorkspaceSettings,
-  type WorkspaceSummary,
-  type WorkspaceThemeColors,
-  type WorkspaceThemeDefinition,
-} from "@/shared/schema";
+import { applyWorkspaceTheme, resolveWorkspaceTheme, workspaceWithSettingsDefaults } from "@/client/theme";
+import type { FsEntry, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/shared/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CanvasMountProps = {
@@ -41,28 +31,6 @@ type AppModal =
 type LauncherBrowserRequest = { id: number; url: string };
 type LauncherPaneRequest = { id: number; kind: "file" | "folder"; path: string };
 type LauncherTerminalRequest = { id: number; input: string };
-
-const THEME_CSS_VARIABLES: Array<[keyof WorkspaceThemeColors, string]> = [
-  ["background", "--background"],
-  ["foreground", "--foreground"],
-  ["muted", "--muted"],
-  ["mutedForeground", "--muted-foreground"],
-  ["primary", "--primary"],
-  ["primaryForeground", "--primary-foreground"],
-  ["secondary", "--secondary"],
-  ["secondaryForeground", "--secondary-foreground"],
-  ["border", "--border"],
-  ["ring", "--ring"],
-  ["surface1", "--surface-1"],
-  ["surface2", "--surface-2"],
-  ["surfaceHover", "--surface-hover"],
-  ["panelBg", "--panel-bg"],
-  ["chromeBg", "--chrome-bg"],
-  ["dockBg", "--dock-bg"],
-  ["controlBg", "--control-bg"],
-  ["inputBg", "--input-bg"],
-  ["gridLine", "--grid-line"],
-];
 
 export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMountProps) {
   const client = useMemo(() => makeClient(baseUrl), [baseUrl]);
@@ -456,45 +424,7 @@ export function workspaceForCurrentView(workspace: Workspace, current: Workspace
 }
 
 function workspaceWithDefaults(workspace: Workspace): Workspace {
-  return { ...workspace, settings: settingsForWorkspace(workspace) };
-}
-
-function settingsForWorkspace(workspace: Workspace) {
-  return { ...DEFAULT_WORKSPACE_SETTINGS, ...(workspace.settings ?? {}) };
-}
-
-function resolveWorkspaceTheme(settings: WorkspaceSettings | undefined | null): WorkspaceThemeDefinition {
-  const normalized = { ...DEFAULT_WORKSPACE_SETTINGS, ...(settings ?? {}) };
-  const custom = normalized.customThemes.find((theme) => theme.id === normalized.theme);
-  if (custom) return normalizedTheme(custom);
-  const builtin = BUILTIN_WORKSPACE_THEMES.find((theme) => theme.id === normalized.theme) ?? BUILTIN_WORKSPACE_THEMES[0];
-  return normalizedTheme(builtin);
-}
-
-function normalizedTheme(theme: {
-  id: string;
-  label: string;
-  mode: "dark" | "light";
-  colors: Partial<WorkspaceThemeColors>;
-}): WorkspaceThemeDefinition {
-  return {
-    id: theme.id,
-    label: theme.label,
-    mode: theme.mode,
-    colors: { ...DEFAULT_THEME_COLORS[theme.mode], ...theme.colors },
-  };
-}
-
-function applyWorkspaceTheme(theme: WorkspaceThemeDefinition): void {
-  const root = document.documentElement;
-  root.classList.toggle("dark", theme.mode === "dark");
-  root.dataset.theme = theme.id;
-  delete root.dataset.accent;
-  root.style.colorScheme = theme.mode;
-  window.localStorage.setItem("canvas-theme", theme.id);
-  for (const [key, cssVariable] of THEME_CSS_VARIABLES) {
-    root.style.setProperty(cssVariable, theme.colors[key]);
-  }
+  return workspaceWithSettingsDefaults(workspace);
 }
 
 function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { addPaneToLayoutTab, leafPaneIds, removePaneFromLayout, splitLayoutAt } from "@/client/Canvas";
 import { DEFAULT_FOLDER_LIMIT, layoutVisibleTree } from "@/client/layout";
+import { addPaneToLayoutTab, leafPaneIds, removePaneFromLayout, splitLayoutAt } from "@/client/paneLayout";
 import type { FsEntry, TiledLayoutNode } from "@/shared/schema";
 
 test("large expanded folders are capped and get a load-more node", () => {
