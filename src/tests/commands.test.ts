@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { workspaceForCurrentView, workspaceForEntry } from "@/client/App";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled, runCommand } from "@/client/commands";
 import { urlForLauncherQuery } from "@/client/launcher";
+import type { Workspace } from "@/shared/schema";
 
 test("command registry surfaces disabled reasons and prevents disabled execution", () => {
   let ran = false;
@@ -43,3 +45,37 @@ test("launcher input resolves URLs and web searches", () => {
   expect(urlForLauncherQuery("pane workspace")).toBe("https://www.google.com/search?q=pane%20workspace");
   expect(urlForLauncherQuery("   ")).toBeNull();
 });
+
+test("workspace entry applies default view without clobbering current view updates", () => {
+  const workspace = makeWorkspaceFixture({
+    activeView: "panes",
+    settings: { theme: "dark", defaultView: "canvas", tabbedPanes: true },
+  });
+  const current = makeWorkspaceFixture({
+    id: workspace.id,
+    activeView: "panes",
+    settings: { theme: "dark", defaultView: "canvas", tabbedPanes: true },
+  });
+
+  expect(workspaceForEntry(workspace).activeView).toBe("canvas");
+  expect(workspaceForCurrentView({ ...workspace, activeView: "canvas" }, current).activeView).toBe("panes");
+});
+
+function makeWorkspaceFixture(overrides: Partial<Workspace> = {}): Workspace {
+  const now = new Date().toISOString();
+  return {
+    id: "workspace:test",
+    label: "Test",
+    rootPath: process.cwd(),
+    activeView: "panes",
+    settings: { theme: "dark", defaultView: "panes", tabbedPanes: true },
+    panes: [],
+    tiledLayout: null,
+    canvasViewport: { x: 0, y: 0, zoom: 1 },
+    activePaneId: null,
+    createdAt: now,
+    updatedAt: now,
+    lastOpenedAt: now,
+    ...overrides,
+  };
+}

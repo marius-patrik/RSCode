@@ -80,7 +80,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         const id = initialWorkspaceId ?? list.activeWorkspaceId;
         const response = (await client.workspace.get.query({ id })) as { workspace: Workspace };
         if (cancelled) return;
-        setActiveWorkspace(response.workspace);
+        setActiveWorkspace(workspaceForEntry(response.workspace));
         setActiveWorkspaceId(response.workspace.id);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -187,7 +187,9 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       const result = (await client.browser.navigate.mutate({ workspaceId, paneId, url })) as {
         workspace: Workspace;
       };
-      setActiveWorkspace((current) => (current?.id === result.workspace.id ? result.workspace : current));
+      setActiveWorkspace((current) =>
+        current?.id === result.workspace.id ? workspaceForCurrentView(result.workspace, current) : current,
+      );
       setWorkspaces((prev) =>
         prev.map((workspace) => (workspace.id === result.workspace.id ? summarizeWorkspace(result.workspace) : workspace)),
       );
@@ -204,7 +206,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       void (async () => {
         try {
           const saved = (await client.workspace.save.mutate({ workspace: nextWorkspace })) as { workspace: Workspace };
-          setActiveWorkspace((current) => (current?.id === saved.workspace.id ? saved.workspace : current));
+          setActiveWorkspace((current) => (current?.id === saved.workspace.id ? workspaceWithDefaults(saved.workspace) : current));
           setWorkspaces((prev) =>
             prev.map((workspace) => (workspace.id === saved.workspace.id ? summarizeWorkspace(saved.workspace) : workspace)),
           );
@@ -222,7 +224,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       setBusy(true);
       try {
         const response = (await client.workspace.setActive.mutate({ id })) as { workspace: Workspace };
-        setActiveWorkspace(response.workspace);
+        setActiveWorkspace(workspaceForEntry(response.workspace));
         setActiveWorkspaceId(response.workspace.id);
         setCommandQuery("");
         setFileTrees(new Map());
@@ -242,7 +244,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     setBusy(true);
     try {
       const response = (await client.workspace.create.mutate({})) as { workspace: Workspace };
-      setActiveWorkspace(response.workspace);
+      setActiveWorkspace(workspaceForEntry(response.workspace));
       setActiveWorkspaceId(response.workspace.id);
       setFileTrees(new Map());
       setRepositories([]);
@@ -267,7 +269,11 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
           void (async () => {
             try {
               const response = (await client.workspace.rename.mutate({ id, label })) as { workspace: Workspace };
-              if (response.workspace.id === activeWorkspace?.id) setActiveWorkspace(response.workspace);
+              if (response.workspace.id === activeWorkspace?.id) {
+                setActiveWorkspace((current) =>
+                  current?.id === response.workspace.id ? workspaceForCurrentView(response.workspace, current) : current,
+                );
+              }
               await refreshWorkspaces();
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err));
@@ -301,7 +307,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
               const active = (await client.workspace.get.query({ id: response.activeWorkspaceId })) as {
                 workspace: Workspace;
               };
-              setActiveWorkspace(active.workspace);
+              setActiveWorkspace(workspaceForEntry(active.workspace));
               setFileTrees(new Map());
               setRepositories([]);
               setGitStatuses(new Map());
@@ -414,6 +420,23 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
 export default function App() {
   return <CanvasMount />;
+}
+
+export function workspaceForEntry(workspace: Workspace): Workspace {
+  const normalized = workspaceWithDefaults(workspace);
+  return { ...normalized, activeView: normalized.settings.defaultView };
+}
+
+export function workspaceForCurrentView(workspace: Workspace, current: Workspace): Workspace {
+  return { ...workspaceWithDefaults(workspace), activeView: current.activeView };
+}
+
+function workspaceWithDefaults(workspace: Workspace): Workspace {
+  return { ...workspace, settings: settingsForWorkspace(workspace) };
+}
+
+function settingsForWorkspace(workspace: Workspace) {
+  return { ...DEFAULT_WORKSPACE_SETTINGS, ...(workspace.settings ?? {}) };
 }
 
 function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
