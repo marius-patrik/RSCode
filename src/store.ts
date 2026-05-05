@@ -1,28 +1,31 @@
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { getPaths, getServicePort, getServiceUrl } from "@/paths.ts";
 import {
-  type CanvasGraph,
-  type CanvasSession,
-  type CanvasSessionIndex,
-  type CanvasSessionSummary,
+  type BrowserPaneState,
+  type BrowserSession,
+  type EditorPaneState,
+  type ExplorerPaneState,
   type FsEntry,
-  GRAPH_NODE_DEFINITIONS,
-  type GraphEdge,
-  type GraphExecutionResult,
-  type GraphExecutionStep,
-  type GraphIssue,
-  type GraphNode,
-  type GraphPinDefinition,
-  canvasGraphSchema,
-  canvasSessionIndexSchema,
-  canvasSessionSchema,
+  type GitDiff,
+  type GitRepository,
+  type GitStatus,
+  type PaneRect,
+  type PaneState,
+  type RepositoriesPaneState,
+  type SourceControlPaneState,
+  type TerminalPaneState,
+  type TiledLayoutNode,
+  type Workspace,
+  type WorkspaceIndex,
+  type WorkspaceSummary,
   defaultViewport,
-  emptyGraph,
+  workspaceIndexSchema,
+  workspaceSchema,
 } from "@/schema.ts";
 
 const MAX_READ_BYTES = 1_000_000;
-const DEFAULT_TERMINAL_TIMEOUT_MS = 10_000;
+const DEFAULT_GIT_DISCOVERY_DEPTH = 5;
 
 async function ensureDir(path: string) {
   await mkdir(path, { recursive: true });
@@ -144,12 +147,10 @@ export class CanvasStore {
       ensureDir(this.paths.runtimeDir),
       ensureDir(this.paths.logsDir),
       ensureDir(this.paths.root),
-      ensureDir(this.paths.sessionsDir),
+      ensureDir(this.paths.workspacesDir),
+      ensureDir(this.paths.browserProfilesDir),
     ]);
-    if (!(await exists(this.paths.graphFile))) {
-      await this.saveGraph(emptyGraph());
-    }
-    await this.ensureSessionsInitialized();
+    await this.ensureWorkspacesInitialized();
   }
 
   async appendLog(line: string) {
@@ -174,540 +175,651 @@ export class CanvasStore {
       port: getServicePort(),
       url: getServiceUrl(),
       logPath: this.paths.serviceLogFile,
-      graphPath: this.paths.graphFile,
       workspacePath: process.cwd(),
       isHealthy: true,
     };
   }
 
-  async ensureSessionsInitialized() {
-    await ensureDir(this.paths.sessionsDir);
-    const existing = await this.readSessionIndex();
+  async ensureWorkspacesInitialized() {
+    await ensureDir(this.paths.workspacesDir);
+    const existing = await this.readWorkspaceIndex();
     const existingIds: string[] = [];
     if (existing) {
-      for (const id of existing.sessionIds) {
-        if (await exists(this.sessionPath(id))) existingIds.push(id);
+      for (const id of existing.workspaceIds) {
+        if (await exists(this.workspacePath(id))) existingIds.push(id);
       }
     }
     if (existing && existingIds.length > 0) {
-      const activeSessionId = existingIds.includes(existing.activeSessionId)
-        ? existing.activeSessionId
-        : (existingIds[0] ?? existing.activeSessionId);
-      await this.writeSessionIndex({ version: 1, activeSessionId, sessionIds: existingIds });
+      const activeWorkspaceId = existingIds.includes(existing.activeWorkspaceId)
+        ? existing.activeWorkspaceId
+        : (existingIds[0] ?? existing.activeWorkspaceId);
+      await this.writeWorkspaceIndex({ version: 1, activeWorkspaceId, workspaceIds: existingIds });
       return;
     }
 
-    const nowIso = now();
-    const graph = await this.loadGraph();
-    const session = makeSession({ label: "Canvas 1", rootPath: process.cwd(), graph, nowIso });
-    await this.writeSession(session);
-    await this.writeSessionIndex({ version: 1, activeSessionId: session.id, sessionIds: [session.id] });
-  }
-
-  async listSessions(): Promise<{ activeSessionId: string; sessions: CanvasSessionSummary[] }> {
-    await this.ensureSessionsInitialized();
-    const index = await this.requireSessionIndex();
-    const sessions = await Promise.all(index.sessionIds.map((id) => this.loadSession(id)));
-    const summaries = sessions.filter(Boolean).map((session) => summarizeSession(session as CanvasSession));
-    return { activeSessionId: index.activeSessionId, sessions: summaries };
-  }
-
-  async getActiveSession(): Promise<CanvasSession> {
-    await this.ensureSessionsInitialized();
-    const index = await this.requireSessionIndex();
-    return this.requireSession(index.activeSessionId);
-  }
-
-  async getSession(id: string): Promise<CanvasSession> {
-    await this.ensureSessionsInitialized();
-    return this.requireSession(id);
-  }
-
-  async createSession(input: { label?: string; rootPath?: string } = {}): Promise<CanvasSession> {
-    await this.ensureSessionsInitialized();
-    const index = await this.requireSessionIndex();
-    const nowIso = now();
-    const rootPath = safeAbsolute(input.rootPath || process.cwd());
-    const label = input.label?.trim() || `Canvas ${index.sessionIds.length + 1}`;
-    const session: CanvasSession = {
-      id: makeSessionId(),
-      label,
-      rootPath,
-      address: rootPath,
-      expandedPaths: [],
-      openPanels: [],
-      graph: emptyGraph(),
-      viewport: defaultViewport(),
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      lastOpenedAt: nowIso,
-    };
-    const nextIds = [...index.sessionIds, session.id];
-    await this.writeSession(session);
-    await this.writeSessionIndex({ version: 1, activeSessionId: session.id, sessionIds: nextIds });
-    return session;
-  }
-
-  async saveSession(session: CanvasSession): Promise<CanvasSession> {
-    await this.ensureSessionsInitialized();
-    const index = await this.requireSessionIndex();
-    if (!index.sessionIds.includes(session.id)) {
-      throw new Error(`unknown session: ${session.id}`);
+    const migrated = await this.migrateLegacySessions();
+    if (migrated.length > 0) {
+      for (const workspace of migrated) await this.writeWorkspace(workspace);
+      await this.writeWorkspaceIndex({
+        version: 1,
+        activeWorkspaceId: migrated[0]?.id ?? migrated[0]!.id,
+        workspaceIds: migrated.map((workspace) => workspace.id),
+      });
+      return;
     }
-    const parsed = canvasSessionSchema.parse({ ...session, updatedAt: now() });
-    await this.writeSession(parsed);
+
+    const workspace = makeWorkspace({
+      label: "Workspace 1",
+      rootPath: process.cwd(),
+      nowIso: now(),
+    });
+    await this.writeWorkspace(workspace);
+    await this.writeWorkspaceIndex({
+      version: 1,
+      activeWorkspaceId: workspace.id,
+      workspaceIds: [workspace.id],
+    });
+  }
+
+  async listWorkspaces(): Promise<{ activeWorkspaceId: string; workspaces: WorkspaceSummary[] }> {
+    await this.ensureWorkspacesInitialized();
+    const index = await this.requireWorkspaceIndex();
+    const workspaces = await Promise.all(index.workspaceIds.map((id) => this.loadWorkspace(id)));
+    return {
+      activeWorkspaceId: index.activeWorkspaceId,
+      workspaces: workspaces.filter(Boolean).map((workspace) => summarizeWorkspace(workspace as Workspace)),
+    };
+  }
+
+  async getActiveWorkspace(): Promise<Workspace> {
+    await this.ensureWorkspacesInitialized();
+    const index = await this.requireWorkspaceIndex();
+    return this.requireWorkspace(index.activeWorkspaceId);
+  }
+
+  async getWorkspace(id: string): Promise<Workspace> {
+    await this.ensureWorkspacesInitialized();
+    return this.requireWorkspace(id);
+  }
+
+  async createWorkspace(input: { label?: string; rootPath?: string } = {}): Promise<Workspace> {
+    await this.ensureWorkspacesInitialized();
+    const index = await this.requireWorkspaceIndex();
+    const rootPath = safeAbsolute(input.rootPath || process.cwd());
+    const label = input.label?.trim() || `Workspace ${index.workspaceIds.length + 1}`;
+    const workspace = makeWorkspace({ label, rootPath, nowIso: now() });
+    await this.writeWorkspace(workspace);
+    await this.writeWorkspaceIndex({
+      version: 1,
+      activeWorkspaceId: workspace.id,
+      workspaceIds: [...index.workspaceIds, workspace.id],
+    });
+    return workspace;
+  }
+
+  async saveWorkspace(workspace: Workspace): Promise<Workspace> {
+    await this.ensureWorkspacesInitialized();
+    const index = await this.requireWorkspaceIndex();
+    if (!index.workspaceIds.includes(workspace.id)) {
+      throw new Error(`unknown workspace: ${workspace.id}`);
+    }
+    const parsed = normalizeWorkspace({ ...workspace, updatedAt: now() });
+    await this.writeWorkspace(parsed);
     return parsed;
   }
 
-  async renameSession(id: string, label: string): Promise<CanvasSession> {
-    const session = await this.requireSession(id);
-    return this.saveSession({ ...session, label: label.trim() || session.label });
+  async renameWorkspace(id: string, label: string): Promise<Workspace> {
+    const workspace = await this.requireWorkspace(id);
+    return this.saveWorkspace({ ...workspace, label: label.trim() || workspace.label });
   }
 
-  async setActiveSession(id: string): Promise<CanvasSession> {
-    await this.ensureSessionsInitialized();
-    const index = await this.requireSessionIndex();
-    if (!index.sessionIds.includes(id)) throw new Error(`unknown session: ${id}`);
-    const session = await this.requireSession(id);
-    const opened = await this.saveSession({ ...session, lastOpenedAt: now() });
-    await this.writeSessionIndex({ ...index, activeSessionId: id });
+  async setActiveWorkspace(id: string): Promise<Workspace> {
+    await this.ensureWorkspacesInitialized();
+    const index = await this.requireWorkspaceIndex();
+    if (!index.workspaceIds.includes(id)) throw new Error(`unknown workspace: ${id}`);
+    const workspace = await this.requireWorkspace(id);
+    const opened = await this.saveWorkspace({ ...workspace, lastOpenedAt: now() });
+    await this.writeWorkspaceIndex({ ...index, activeWorkspaceId: id });
     return opened;
   }
 
-  async closeSession(id: string): Promise<{ activeSessionId: string; sessions: CanvasSessionSummary[] }> {
-    await this.ensureSessionsInitialized();
-    const index = await this.requireSessionIndex();
-    if (!index.sessionIds.includes(id)) throw new Error(`unknown session: ${id}`);
-    const remainingIds = index.sessionIds.filter((candidate) => candidate !== id);
-    await rm(this.sessionPath(id), { force: true });
+  async closeWorkspace(id: string): Promise<{ activeWorkspaceId: string; workspaces: WorkspaceSummary[] }> {
+    await this.ensureWorkspacesInitialized();
+    const index = await this.requireWorkspaceIndex();
+    if (!index.workspaceIds.includes(id)) throw new Error(`unknown workspace: ${id}`);
+    const remainingIds = index.workspaceIds.filter((candidate) => candidate !== id);
+    await rm(this.workspacePath(id), { force: true });
     if (remainingIds.length === 0) {
-      const replacement = makeSession({
-        label: "Canvas 1",
+      const replacement = makeWorkspace({
+        label: "Workspace 1",
         rootPath: process.cwd(),
-        graph: emptyGraph(),
         nowIso: now(),
       });
-      await this.writeSession(replacement);
-      await this.writeSessionIndex({
+      await this.writeWorkspace(replacement);
+      await this.writeWorkspaceIndex({
         version: 1,
-        activeSessionId: replacement.id,
-        sessionIds: [replacement.id],
+        activeWorkspaceId: replacement.id,
+        workspaceIds: [replacement.id],
       });
       return {
-        activeSessionId: replacement.id,
-        sessions: [summarizeSession(replacement)],
+        activeWorkspaceId: replacement.id,
+        workspaces: [summarizeWorkspace(replacement)],
       };
     }
-    const activeSessionId = index.activeSessionId === id ? (remainingIds[0] as string) : index.activeSessionId;
-    await this.writeSessionIndex({ version: 1, activeSessionId, sessionIds: remainingIds });
-    return this.listSessions();
+    const activeWorkspaceId = index.activeWorkspaceId === id ? (remainingIds[0] as string) : index.activeWorkspaceId;
+    await this.writeWorkspaceIndex({ version: 1, activeWorkspaceId, workspaceIds: remainingIds });
+    return this.listWorkspaces();
   }
 
-  async loadGraph(): Promise<CanvasGraph> {
-    const raw = await readJson<unknown>(this.paths.graphFile);
-    if (!raw) return emptyGraph();
-    const parsed = canvasGraphSchema.safeParse(raw);
-    return parsed.success ? parsed.data : emptyGraph();
+  async getBrowserSession(workspaceId: string, paneId: string): Promise<BrowserSession> {
+    const workspace = await this.requireWorkspace(workspaceId);
+    const pane = workspace.panes.find((candidate) => candidate.id === paneId);
+    if (pane?.type !== "browser") throw new Error(`unknown browser pane: ${paneId}`);
+    return browserSessionFor(this.paths.browserProfilesDir, workspaceId, pane);
   }
 
-  async saveGraph(graph: CanvasGraph): Promise<CanvasGraph> {
-    const parsed = canvasGraphSchema.parse({
-      ...graph,
-      updatedAt: now(),
+  async navigateBrowserPane(input: {
+    workspaceId: string;
+    paneId: string;
+    url: string;
+    replace?: boolean;
+  }): Promise<{ workspace: Workspace; browser: BrowserSession }> {
+    const workspace = await this.requireWorkspace(input.workspaceId);
+    const nextPanes = workspace.panes.map((pane) => {
+      if (pane.id !== input.paneId) return pane;
+      if (pane.type !== "browser") throw new Error(`pane is not a browser: ${pane.id}`);
+      const history = input.replace
+        ? [...pane.history.slice(0, pane.historyIndex), input.url, ...pane.history.slice(pane.historyIndex + 1)]
+        : [...pane.history.slice(0, pane.historyIndex + 1), input.url];
+      return {
+        ...pane,
+        title: titleForBrowserUrl(input.url),
+        url: input.url,
+        history,
+        historyIndex: Math.max(0, history.length - 1),
+        updatedAt: now(),
+      } satisfies BrowserPaneState;
     });
-    await writeJson(this.paths.graphFile, parsed);
-    return parsed;
+    const saved = await this.saveWorkspace({ ...workspace, panes: nextPanes, activePaneId: input.paneId });
+    return { workspace: saved, browser: await this.getBrowserSession(saved.id, input.paneId) };
   }
 
-  validateGraph(graph: CanvasGraph): GraphIssue[] {
-    return validateGraph(graph);
+  async listGitRepositories(rootPath: string, depth = DEFAULT_GIT_DISCOVERY_DEPTH): Promise<GitRepository[]> {
+    const root = safeAbsolute(rootPath);
+    const repos = await discoverGitRepositories(root, depth);
+    const out: GitRepository[] = [];
+    for (const repoPath of repos) {
+      const branch = cleanGitOutput(await runGit(repoPath, ["branch", "--show-current"]));
+      const rel = relative(root, repoPath);
+      out.push({
+        id: repoPath,
+        name: basename(repoPath) || repoPath,
+        rootPath: repoPath,
+        relativePath: rel || ".",
+        branch: branch || null,
+      });
+    }
+    return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   }
 
-  async executeGraph(graph: CanvasGraph, startNodeId?: string | null): Promise<GraphExecutionResult> {
-    return executeGraph(graph, startNodeId ?? null);
+  async getGitStatus(repoPath: string): Promise<GitStatus> {
+    const repo = safeAbsolute(repoPath);
+    const output = await runGit(repo, ["status", "--porcelain=v1", "--branch"]);
+    return parseGitStatus(repo, output);
   }
 
-  private sessionPath(id: string): string {
-    return resolve(this.paths.sessionsDir, `${encodeURIComponent(id)}.json`);
+  async getGitDiff(repoPath: string, path: string): Promise<GitDiff> {
+    const repo = safeAbsolute(repoPath);
+    const filePath = path || ".";
+    let diff = await runGit(repo, ["diff", "--", filePath]);
+    if (!diff.trim()) diff = await runGit(repo, ["diff", "--cached", "--", filePath]);
+    return { repoPath: repo, path: filePath, diff };
   }
 
-  private async readSessionIndex(): Promise<CanvasSessionIndex | null> {
-    const raw = await readJson<unknown>(this.paths.sessionsIndexFile);
-    const parsed = canvasSessionIndexSchema.safeParse(raw);
+  private workspacePath(id: string): string {
+    return resolve(this.paths.workspacesDir, `${encodeURIComponent(id)}.json`);
+  }
+
+  private async readWorkspaceIndex(): Promise<WorkspaceIndex | null> {
+    const raw = await readJson<unknown>(this.paths.workspacesIndexFile);
+    const parsed = workspaceIndexSchema.safeParse(raw);
     return parsed.success ? parsed.data : null;
   }
 
-  private async requireSessionIndex(): Promise<CanvasSessionIndex> {
-    const index = await this.readSessionIndex();
-    if (!index) throw new Error("session index is missing");
+  private async requireWorkspaceIndex(): Promise<WorkspaceIndex> {
+    const index = await this.readWorkspaceIndex();
+    if (!index) throw new Error("workspace index is missing");
     return index;
   }
 
-  private async writeSessionIndex(index: CanvasSessionIndex) {
-    await writeJson(this.paths.sessionsIndexFile, canvasSessionIndexSchema.parse(index));
+  private async writeWorkspaceIndex(index: WorkspaceIndex) {
+    await writeJson(this.paths.workspacesIndexFile, workspaceIndexSchema.parse(index));
   }
 
-  private async loadSession(id: string): Promise<CanvasSession | null> {
-    const raw = await readJson<unknown>(this.sessionPath(id));
-    const parsed = canvasSessionSchema.safeParse(raw);
-    return parsed.success ? parsed.data : null;
+  private async loadWorkspace(id: string): Promise<Workspace | null> {
+    const raw = await readJson<unknown>(this.workspacePath(id));
+    const parsed = workspaceSchema.safeParse(raw);
+    return parsed.success ? normalizeWorkspace(parsed.data) : null;
   }
 
-  private async requireSession(id: string): Promise<CanvasSession> {
-    const session = await this.loadSession(id);
-    if (!session) throw new Error(`unknown session: ${id}`);
-    return session;
+  private async requireWorkspace(id: string): Promise<Workspace> {
+    const workspace = await this.loadWorkspace(id);
+    if (!workspace) throw new Error(`unknown workspace: ${id}`);
+    return workspace;
   }
 
-  private async writeSession(session: CanvasSession) {
-    await writeJson(this.sessionPath(session.id), canvasSessionSchema.parse(session));
+  private async writeWorkspace(workspace: Workspace) {
+    await writeJson(this.workspacePath(workspace.id), workspaceSchema.parse(normalizeWorkspace(workspace)));
+  }
+
+  private async migrateLegacySessions(): Promise<Workspace[]> {
+    const rawIndex = await readJson<Record<string, unknown>>(this.paths.sessionsIndexFile);
+    const sessionIds = Array.isArray(rawIndex?.sessionIds)
+      ? rawIndex.sessionIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const activeSessionId = typeof rawIndex?.activeSessionId === "string" ? rawIndex.activeSessionId : null;
+    if (sessionIds.length === 0) return [];
+
+    const migrated: Workspace[] = [];
+    for (const sessionId of sessionIds) {
+      const raw = await readJson<Record<string, unknown>>(
+        resolve(this.paths.sessionsDir, `${encodeURIComponent(sessionId)}.json`),
+      );
+      if (!raw) continue;
+      const workspace = migrateLegacySession(raw, sessionId);
+      if (workspace) migrated.push(workspace);
+    }
+    if (activeSessionId) {
+      migrated.sort((a, b) => {
+        if (a.id === activeSessionId) return -1;
+        if (b.id === activeSessionId) return 1;
+        return 0;
+      });
+    }
+    return migrated;
   }
 }
 
-function makeSession(args: {
-  label: string;
-  rootPath: string;
-  graph: CanvasGraph;
-  nowIso: string;
-}): CanvasSession {
-  return {
-    id: makeSessionId(),
+function makeWorkspace(args: { label: string; rootPath: string; nowIso: string }): Workspace {
+  const explorer = makeExplorerPane(args.rootPath, 0, args.nowIso);
+  return normalizeWorkspace({
+    id: makeWorkspaceId(),
     label: args.label,
     rootPath: args.rootPath,
-    address: args.rootPath,
-    expandedPaths: [],
-    openPanels: [],
-    graph: args.graph,
-    viewport: defaultViewport(),
+    activeView: "panes",
+    panes: [explorer],
+    tiledLayout: { type: "leaf", paneId: explorer.id },
+    canvasViewport: defaultViewport(),
+    activePaneId: explorer.id,
     createdAt: args.nowIso,
     updatedAt: args.nowIso,
     lastOpenedAt: args.nowIso,
-  };
+  });
 }
 
-function makeSessionId(): string {
-  return `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+function makeWorkspaceId(): string {
+  return `workspace-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function summarizeSession(session: CanvasSession): CanvasSessionSummary {
+function makePaneId(type: PaneState["type"], value: string): string {
+  return `${type}:${encodeURIComponent(value)}`;
+}
+
+function defaultPaneRect(index: number): PaneRect {
   return {
-    id: session.id,
-    label: session.label,
-    rootPath: session.rootPath,
-    address: session.address,
-    panelCount: session.openPanels.length,
-    graphNodeCount: session.graph.nodes.length,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    lastOpenedAt: session.lastOpenedAt,
+    x: 96 + (index % 4) * 32,
+    y: 72 + (index % 4) * 28,
+    width: 760,
+    height: 480,
   };
 }
 
-function findPin(node: GraphNode, pinId: string, direction: "input" | "output"): GraphPinDefinition | null {
-  const definition = GRAPH_NODE_DEFINITIONS[node.kind];
-  const pins = direction === "input" ? definition.inputs : definition.outputs;
-  return pins.find((pin) => pin.id === pinId) ?? null;
+function makeExplorerPane(rootPath: string, index: number, nowIso: string): ExplorerPaneState {
+  return {
+    id: makePaneId("explorer", rootPath),
+    type: "explorer",
+    title: basename(rootPath) || rootPath,
+    folderPath: rootPath,
+    expandedPaths: [],
+    selectedPath: null,
+    placement: "tiled",
+    rect: defaultPaneRect(index),
+    z: index,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
 }
 
-export function validateGraph(graph: CanvasGraph): GraphIssue[] {
-  const issues: GraphIssue[] = [];
-  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
-  const seenEdgeIds = new Set<string>();
-
-  for (const edge of graph.edges) {
-    if (seenEdgeIds.has(edge.id)) {
-      issues.push({ severity: "error", edgeId: edge.id, message: `duplicate edge id: ${edge.id}` });
-    }
-    seenEdgeIds.add(edge.id);
-
-    const source = nodes.get(edge.source);
-    const target = nodes.get(edge.target);
-    if (!source) {
-      issues.push({ severity: "error", edgeId: edge.id, message: `unknown source node: ${edge.source}` });
-      continue;
-    }
-    if (!target) {
-      issues.push({ severity: "error", edgeId: edge.id, message: `unknown target node: ${edge.target}` });
-      continue;
-    }
-    const sourcePin = findPin(source, edge.sourcePin, "output");
-    const targetPin = findPin(target, edge.targetPin, "input");
-    if (!sourcePin) {
-      issues.push({ severity: "error", edgeId: edge.id, message: `unknown source pin: ${edge.source}.${edge.sourcePin}` });
-      continue;
-    }
-    if (!targetPin) {
-      issues.push({ severity: "error", edgeId: edge.id, message: `unknown target pin: ${edge.target}.${edge.targetPin}` });
-      continue;
-    }
-    if (sourcePin.type !== targetPin.type) {
-      issues.push({
-        severity: "error",
-        edgeId: edge.id,
-        message: `pin type mismatch: ${sourcePin.type} cannot connect to ${targetPin.type}`,
-      });
-    }
-    if (edge.source === edge.target) {
-      issues.push({ severity: "error", edgeId: edge.id, message: "self-connections are not executable" });
-    }
-  }
-
-  for (const node of graph.nodes) {
-    if (!GRAPH_NODE_DEFINITIONS[node.kind]) {
-      issues.push({ severity: "error", nodeId: node.id, message: `unknown node kind: ${node.kind}` });
-      continue;
-    }
-    for (const missing of missingRequiredConfig(node)) {
-      issues.push({ severity: "error", nodeId: node.id, message: `missing ${missing}` });
-    }
-  }
-
-  return issues;
+function normalizeWorkspace(workspace: Workspace): Workspace {
+  const panes = workspace.panes.map((pane, index) => normalizePane(pane, index, workspace.rootPath));
+  const paneIds = new Set(panes.map((pane) => pane.id));
+  const tiledLayout = pruneLayout(workspace.tiledLayout, paneIds) ?? layoutForPanes(panes.filter((pane) => pane.placement === "tiled"));
+  const activePaneId = workspace.activePaneId && paneIds.has(workspace.activePaneId) ? workspace.activePaneId : (panes[0]?.id ?? null);
+  return workspaceSchema.parse({
+    ...workspace,
+    panes,
+    tiledLayout,
+    activePaneId,
+  });
 }
 
-function missingRequiredConfig(node: GraphNode): string[] {
-  if (node.kind === "fs.read" || node.kind === "fs.mkdir" || node.kind === "fs.delete") {
-    return optionalString(node.config.path) ? [] : ["path"];
-  }
-  if (node.kind === "fs.write") {
-    const missing: string[] = [];
-    if (!optionalString(node.config.path)) missing.push("path");
-    if (typeof node.config.text !== "string") missing.push("text");
-    return missing;
-  }
-  const missing: string[] = [];
-  if (!optionalString(node.config.command)) missing.push("command");
-  if (!optionalString(node.config.cwd)) missing.push("cwd");
-  return missing;
-}
-
-async function executeGraph(graph: CanvasGraph, startNodeId: string | null): Promise<GraphExecutionResult> {
-  const startedAt = now();
-  const issues = validateGraph(graph);
-  if (issues.some((issue) => issue.severity === "error")) {
-    return { ok: false, startedAt, completedAt: now(), steps: [], issues };
-  }
-
-  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const selectedIds = selectExecutableNodes(graph, startNodeId);
-  const order = topologicalOrder(graph, selectedIds);
-  if (order.cycle) {
+function normalizePane(pane: PaneState, index: number, rootPath: string): PaneState {
+  const base = {
+    ...pane,
+    rect: pane.rect ?? defaultPaneRect(index),
+    z: pane.z ?? index,
+  };
+  if (base.type === "browser") {
+    const history = base.history.length > 0 ? base.history : [base.url || "about:blank"];
+    const historyIndex = Math.min(base.historyIndex, history.length - 1);
     return {
-      ok: false,
-      startedAt,
-      completedAt: now(),
-      steps: [],
-      issues: [...issues, { severity: "error", message: "graph contains a cycle" }],
+      ...base,
+      url: history[historyIndex] ?? base.url ?? "about:blank",
+      history,
+      historyIndex,
+      sessionId: base.sessionId || `${base.id}:session`,
     };
   }
-
-  const values = new Map<string, Record<string, unknown>>();
-  const steps: GraphExecutionStep[] = [];
-
-  for (const nodeId of order.ids) {
-    const node = nodesById.get(nodeId);
-    if (!node) continue;
-    const stepStartedAt = now();
-    const inputs = inputValuesFor(node, graph.edges, values);
-    try {
-      const outputs = await executeNode(node, inputs);
-      values.set(node.id, outputs);
-      steps.push({
-        nodeId: node.id,
-        kind: node.kind,
-        status: "completed",
-        outputs,
-        error: null,
-        startedAt: stepStartedAt,
-        completedAt: now(),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const outputs = { error: message };
-      values.set(node.id, outputs);
-      steps.push({
-        nodeId: node.id,
-        kind: node.kind,
-        status: "failed",
-        outputs,
-        error: message,
-        startedAt: stepStartedAt,
-        completedAt: now(),
-      });
-    }
-  }
-
-  return {
-    ok: steps.every((step) => step.status === "completed"),
-    startedAt,
-    completedAt: now(),
-    steps,
-    issues,
-  };
+  if (base.type === "repositories" && !base.rootPath) return { ...base, rootPath };
+  return base;
 }
 
-function selectExecutableNodes(graph: CanvasGraph, startNodeId: string | null): Set<string> {
-  if (!startNodeId) return new Set(graph.nodes.map((node) => node.id));
-  const ids = new Set<string>([startNodeId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const edge of graph.edges) {
-      if (ids.has(edge.source) && !ids.has(edge.target)) {
-        ids.add(edge.target);
-        changed = true;
-      }
-      if (ids.has(edge.target) && !ids.has(edge.source)) {
-        ids.add(edge.source);
-        changed = true;
-      }
-    }
-  }
-  return ids;
-}
-
-function topologicalOrder(
-  graph: CanvasGraph,
-  selectedIds: Set<string>,
-): { ids: string[]; cycle: boolean } {
-  const indegree = new Map<string, number>();
-  const outgoing = new Map<string, string[]>();
-  for (const id of selectedIds) {
-    indegree.set(id, 0);
-    outgoing.set(id, []);
-  }
-  for (const edge of graph.edges) {
-    if (!selectedIds.has(edge.source) || !selectedIds.has(edge.target)) continue;
-    outgoing.get(edge.source)?.push(edge.target);
-    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
-  }
-
-  const queue = [...indegree.entries()]
-    .filter(([, degree]) => degree === 0)
-    .map(([id]) => id)
-    .sort();
-  const result: string[] = [];
-
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    result.push(id);
-    for (const target of (outgoing.get(id) ?? []).sort()) {
-      const next = (indegree.get(target) ?? 0) - 1;
-      indegree.set(target, next);
-      if (next === 0) queue.push(target);
-    }
-    queue.sort();
-  }
-
-  return { ids: result, cycle: result.length !== selectedIds.size };
-}
-
-function inputValuesFor(
-  node: GraphNode,
-  edges: GraphEdge[],
-  values: Map<string, Record<string, unknown>>,
-): Record<string, unknown> {
-  const inputs: Record<string, unknown> = {
-    path: node.config.path,
-    text: node.config.text,
-    command: node.config.command,
-    cwd: node.config.cwd,
-  };
-
-  for (const edge of edges) {
-    if (edge.target !== node.id) continue;
-    const sourceOutputs = values.get(edge.source);
-    if (!sourceOutputs) continue;
-    if (edge.sourcePin in sourceOutputs) {
-      inputs[edge.targetPin] = sourceOutputs[edge.sourcePin];
-    }
-  }
-
-  return inputs;
-}
-
-async function executeNode(
-  node: GraphNode,
-  inputs: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  if (node.kind === "fs.read") {
-    const path = requiredString(inputs.path, "path");
-    const text = await readFsFile(path);
-    return { done: true, text, result: { path, bytes: new TextEncoder().encode(text).byteLength } };
-  }
-
-  if (node.kind === "fs.write") {
-    const path = requiredString(inputs.path, "path");
-    const text = requiredString(inputs.text, "text");
-    await writeFsFile(path, text);
-    return { done: true, result: { path, bytes: new TextEncoder().encode(text).byteLength } };
-  }
-
-  if (node.kind === "fs.mkdir") {
-    const path = requiredString(inputs.path, "path");
-    await mkdirFs(path);
-    return { done: true, result: { path } };
-  }
-
-  if (node.kind === "fs.delete") {
-    const path = requiredString(inputs.path, "path");
-    await deleteFsEntry(path);
-    return { done: true, result: { path } };
-  }
-
-  const command = requiredString(inputs.command, "command");
-  const cwd = safeAbsolute(optionalString(inputs.cwd) || process.cwd());
-  const timeoutMs = node.config.timeoutMs ?? DEFAULT_TERMINAL_TIMEOUT_MS;
-  const result = await runTerminalCommand(command, cwd, timeoutMs);
-  if (result.exitCode !== 0) {
-    return {
-      done: true,
-      text: result.stdout,
-      result,
-      error: result.stderr || `command exited ${result.exitCode}`,
+function layoutForPanes(panes: PaneState[]): TiledLayoutNode | null {
+  if (panes.length === 0) return null;
+  let layout: TiledLayoutNode = { type: "leaf", paneId: panes[0]!.id };
+  for (const pane of panes.slice(1)) {
+    layout = {
+      type: "split",
+      id: `split:${layoutNodeKey(layout)}:${pane.id}`,
+      direction: "horizontal",
+      ratio: 0.5,
+      first: layout,
+      second: { type: "leaf", paneId: pane.id },
     };
   }
-  return { done: true, text: result.stdout, result };
+  return layout;
 }
 
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
+function pruneLayout(layout: TiledLayoutNode | null, paneIds: Set<string>): TiledLayoutNode | null {
+  if (!layout) return null;
+  if (layout.type === "leaf") return paneIds.has(layout.paneId) ? layout : null;
+  const first = pruneLayout(layout.first, paneIds);
+  const second = pruneLayout(layout.second, paneIds);
+  if (first && second) return { ...layout, first, second };
+  return first ?? second;
 }
 
-function requiredString(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`missing ${label}`);
+function layoutNodeKey(layout: TiledLayoutNode): string {
+  return layout.type === "leaf" ? layout.paneId : layout.id;
+}
+
+function summarizeWorkspace(workspace: Workspace): WorkspaceSummary {
+  return {
+    id: workspace.id,
+    label: workspace.label,
+    rootPath: workspace.rootPath,
+    activeView: workspace.activeView,
+    paneCount: workspace.panes.length,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
+    lastOpenedAt: workspace.lastOpenedAt,
+  };
+}
+
+function migrateLegacySession(raw: Record<string, unknown>, fallbackId: string): Workspace | null {
+  const nowIso = now();
+  const rootPath = typeof raw.rootPath === "string" ? safeAbsolute(raw.rootPath) : process.cwd();
+  const id = typeof raw.id === "string" ? raw.id : fallbackId;
+  const label = typeof raw.label === "string" && raw.label.trim() ? raw.label : "Migrated Workspace";
+  const panes: PaneState[] = [makeExplorerPane(rootPath, 0, nowIso)];
+  const oldPanels = Array.isArray(raw.openPanels) ? raw.openPanels : [];
+  for (const oldPanel of oldPanels) {
+    if (!oldPanel || typeof oldPanel !== "object") continue;
+    const panel = oldPanel as Record<string, unknown>;
+    const createdAt = typeof panel.createdAt === "string" ? panel.createdAt : nowIso;
+    const updatedAt = typeof panel.updatedAt === "string" ? panel.updatedAt : nowIso;
+    const rect = coerceRect(panel.rect, panes.length);
+    const z = typeof panel.z === "number" ? Math.max(0, Math.trunc(panel.z)) : panes.length;
+    if (panel.kind === "editor" && typeof panel.path === "string") {
+      panes.push({
+        id: typeof panel.id === "string" ? panel.id : makePaneId("editor", panel.path),
+        type: "editor",
+        title: typeof panel.title === "string" ? panel.title : basename(panel.path),
+        filePath: panel.path,
+        draftBody: typeof panel.draftBody === "string" ? panel.draftBody : "",
+        dirty: Boolean(panel.dirty),
+        placement: "floating",
+        rect,
+        z,
+        createdAt,
+        updatedAt,
+      } satisfies EditorPaneState);
+    }
+    if (panel.kind === "terminal" && typeof panel.cwd === "string") {
+      panes.push({
+        id: typeof panel.id === "string" ? panel.id : makePaneId("terminal", panel.cwd),
+        type: "terminal",
+        title: typeof panel.title === "string" ? panel.title : `terminal - ${panel.cwd}`,
+        cwd: panel.cwd,
+        placement: "floating",
+        rect,
+        z,
+        createdAt,
+        updatedAt,
+      } satisfies TerminalPaneState);
+    }
   }
-  return value;
+
+  return normalizeWorkspace({
+    id,
+    label,
+    rootPath,
+    activeView: "panes",
+    panes,
+    tiledLayout: layoutForPanes(panes.filter((pane) => pane.placement === "tiled")),
+    canvasViewport: defaultViewport(),
+    activePaneId: panes.at(-1)?.id ?? panes[0]?.id ?? null,
+    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : nowIso,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : nowIso,
+    lastOpenedAt: typeof raw.lastOpenedAt === "string" ? raw.lastOpenedAt : nowIso,
+  });
 }
 
-async function runTerminalCommand(command: string, cwd: string, timeoutMs: number) {
-  const shell = process.env.SHELL ?? "/bin/bash";
-  const proc = Bun.spawn([shell, "-lc", command], {
-    cwd,
+function coerceRect(value: unknown, index: number): PaneRect {
+  if (!value || typeof value !== "object") return defaultPaneRect(index);
+  const rect = value as Record<string, unknown>;
+  const fallback = defaultPaneRect(index);
+  return {
+    x: typeof rect.x === "number" ? rect.x : fallback.x,
+    y: typeof rect.y === "number" ? rect.y : fallback.y,
+    width: typeof rect.width === "number" && rect.width > 0 ? rect.width : fallback.width,
+    height: typeof rect.height === "number" && rect.height > 0 ? rect.height : fallback.height,
+  };
+}
+
+function browserSessionFor(root: string, workspaceId: string, pane: BrowserPaneState): BrowserSession {
+  return {
+    workspaceId,
+    paneId: pane.id,
+    url: pane.url,
+    title: titleForBrowserUrl(pane.url),
+    canGoBack: pane.historyIndex > 0,
+    canGoForward: pane.historyIndex < pane.history.length - 1,
+    profilePath: resolve(root, encodeURIComponent(workspaceId), encodeURIComponent(pane.id)),
+  };
+}
+
+function titleForBrowserUrl(url: string): string {
+  if (!url || url === "about:blank") return "Browser";
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname || parsed.pathname || url;
+  } catch {
+    return url;
+  }
+}
+
+async function discoverGitRepositories(root: string, depth: number): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string, remaining: number) {
+    if (remaining < 0) return;
+    const gitPath = resolve(dir, ".git");
+    if (await exists(gitPath)) {
+      out.push(dir);
+      return;
+    }
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "dist") continue;
+      await walk(resolve(dir, entry.name), remaining - 1);
+    }
+  }
+  await walk(root, depth);
+  return out;
+}
+
+async function runGit(repoPath: string, args: string[]): Promise<string> {
+  const proc = Bun.spawn(["git", "-C", repoPath, ...args], {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, TERM: "xterm-256color" },
   });
-
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    proc.kill("SIGTERM");
-  }, timeoutMs);
-
   const [exitCode, stdout, stderr] = await Promise.all([
     proc.exited,
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
-  ]).finally(() => clearTimeout(timer));
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(cleanGitOutput(stderr) || `git ${args.join(" ")} exited ${exitCode}`);
+  }
+  return stdout;
+}
 
+function cleanGitOutput(output: string): string {
+  return output.trim();
+}
+
+function parseGitStatus(repoPath: string, output: string): GitStatus {
+  const lines = output.split(/\r?\n/).filter(Boolean);
+  const header = lines[0]?.startsWith("## ") ? lines.shift() ?? "" : "";
+  const branchMatch = /^## ([^.[\s]+|\S+)/.exec(header);
+  const aheadMatch = /ahead (\d+)/.exec(header);
+  const behindMatch = /behind (\d+)/.exec(header);
+  const files = lines.map((line) => {
+    const x = line[0] ?? " ";
+    const y = line[1] ?? " ";
+    const rawPath = line.slice(3);
+    const renamed = rawPath.includes(" -> ") ? rawPath.split(" -> ").at(-1) ?? rawPath : rawPath;
+    return {
+      path: renamed,
+      status: `${x}${y}`.trim() || "modified",
+      staged: x !== " " && x !== "?",
+    };
+  });
   return {
-    command,
+    repoPath,
+    branch: branchMatch?.[1] === "HEAD" ? null : (branchMatch?.[1] ?? null),
+    ahead: Number(aheadMatch?.[1] ?? 0),
+    behind: Number(behindMatch?.[1] ?? 0),
+    clean: files.length === 0,
+    files,
+  };
+}
+
+export function makeTerminalPane(cwd: string, panes: PaneState[], placement: PaneState["placement"] = "tiled"): TerminalPaneState {
+  const nowIso = now();
+  return {
+    id: `${makePaneId("terminal", cwd)}:${Date.now().toString(36)}`,
+    type: "terminal",
+    title: `terminal - ${cwd}`,
     cwd,
-    exitCode: timedOut ? 124 : exitCode,
-    stdout,
-    stderr: timedOut ? `${stderr}\nTimed out after ${timeoutMs}ms`.trim() : stderr,
-    timedOut,
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: panes.length,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+export function makeEditorPane(
+  filePath: string,
+  body: string,
+  panes: PaneState[],
+  placement: PaneState["placement"] = "tiled",
+): EditorPaneState {
+  const nowIso = now();
+  return {
+    id: makePaneId("editor", filePath),
+    type: "editor",
+    title: basename(filePath) || filePath,
+    filePath,
+    draftBody: body,
+    dirty: false,
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: panes.length,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+export function makeBrowserPane(
+  url: string,
+  panes: PaneState[],
+  placement: PaneState["placement"] = "tiled",
+): BrowserPaneState {
+  const nowIso = now();
+  const id = `${makePaneId("browser", url || "about:blank")}:${Date.now().toString(36)}`;
+  return {
+    id,
+    type: "browser",
+    title: titleForBrowserUrl(url),
+    url,
+    history: [url],
+    historyIndex: 0,
+    sessionId: `${id}:session`,
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: panes.length,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+export function makeSourceControlPane(
+  repoPath: string | null,
+  panes: PaneState[],
+  placement: PaneState["placement"] = "tiled",
+): SourceControlPaneState {
+  const nowIso = now();
+  return {
+    id: `${makePaneId("sourceControl", repoPath || "workspace")}:${Date.now().toString(36)}`,
+    type: "sourceControl",
+    title: "Source Control",
+    repoPath,
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: panes.length,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+export function makeRepositoriesPane(
+  rootPath: string,
+  panes: PaneState[],
+  placement: PaneState["placement"] = "tiled",
+): RepositoriesPaneState {
+  const nowIso = now();
+  return {
+    id: `${makePaneId("repositories", rootPath)}:${Date.now().toString(36)}`,
+    type: "repositories",
+    title: "Repositories",
+    rootPath,
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: panes.length,
+    createdAt: nowIso,
+    updatedAt: nowIso,
   };
 }

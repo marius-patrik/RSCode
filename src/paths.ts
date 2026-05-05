@@ -23,13 +23,17 @@ export function getPaths() {
   const runtimeDir = resolve(root, "runtime");
   const logsDir = resolve(root, "logs");
   const sessionsDir = resolve(root, "sessions");
+  const workspacesDir = resolve(root, "workspaces");
+  const browserProfilesDir = resolve(root, "browser-profiles");
   return {
     root,
     runtimeDir,
     logsDir,
     sessionsDir,
-    graphFile: resolve(root, "graph.json"),
     sessionsIndexFile: resolve(sessionsDir, "index.json"),
+    workspacesDir,
+    workspacesIndexFile: resolve(workspacesDir, "index.json"),
+    browserProfilesDir,
     runtimeFile: resolve(runtimeDir, "service.json"),
     serviceLogFile: resolve(logsDir, "service.log"),
   };

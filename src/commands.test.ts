@@ -8,7 +8,7 @@ test("command registry surfaces disabled reasons and prevents disabled execution
       id: "enabled",
       label: "Enabled",
       scope: "global",
-      group: "session",
+      group: "workspace",
       enabled,
       run: () => {
         ran = true;
@@ -18,7 +18,7 @@ test("command registry surfaces disabled reasons and prevents disabled execution
       id: "disabled",
       label: "Disabled",
       scope: "global",
-      group: "session",
+      group: "workspace",
       enabled: () => disabled("missing context"),
       run: () => {
         throw new Error("should not run");

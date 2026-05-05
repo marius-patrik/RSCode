@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* Tailwind v4 content discovery: scan our actual JSX/TSX sources. */
-@source "../app/**/*.{ts,tsx}";
+@source "./**/*.{ts,tsx}";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -16,6 +16,9 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -23,38 +26,40 @@
 }
 
 :root {
-  --radius: 0.85rem;
-  --background: #000000;
-  --foreground: #f5f5f6;
-  --muted: #1a1a1d;
-  --muted-foreground: #a1a1aa;
-  --primary: rgba(255, 255, 255, 0.85);
-  --primary-foreground: #0a0a0a;
-  --secondary: #16161a;
-  --secondary-foreground: #f5f5f6;
-  --border: rgba(255, 255, 255, 0.14);
-  --ring: rgba(255, 255, 255, 0.4);
-  --surface-1: rgba(255, 255, 255, 0.04);
-  --surface-2: rgba(255, 255, 255, 0.07);
-  --surface-hover: rgba(255, 255, 255, 0.1);
-  --input-bg: rgba(255, 255, 255, 0.05);
+  --radius: 0.5rem;
+  --background: #f7f7f5;
+  --foreground: #050505;
+  --muted: #e8e8e4;
+  --muted-foreground: #5f5f5c;
+  --primary: #050505;
+  --primary-foreground: #ffffff;
+  --secondary: #eeeeea;
+  --secondary-foreground: #050505;
+  --border: rgba(0, 0, 0, 0.14);
+  --ring: rgba(0, 0, 0, 0.48);
+  --surface-1: rgba(0, 0, 0, 0.035);
+  --surface-2: rgba(0, 0, 0, 0.065);
+  --surface-hover: rgba(0, 0, 0, 0.1);
+  --input-bg: rgba(0, 0, 0, 0.04);
+  --grid-line: rgba(0, 0, 0, 0.06);
 }
 
 .dark {
   --background: #000000;
-  --foreground: #f5f5f6;
-  --muted: #1a1a1d;
-  --muted-foreground: #a1a1aa;
-  --primary: rgba(255, 255, 255, 0.85);
+  --foreground: #ffffff;
+  --muted: #111111;
+  --muted-foreground: #9b9b9b;
+  --primary: #ffffff;
   --primary-foreground: #0a0a0a;
-  --secondary: #16161a;
-  --secondary-foreground: #f5f5f6;
-  --border: rgba(255, 255, 255, 0.14);
-  --ring: rgba(255, 255, 255, 0.4);
-  --surface-1: rgba(255, 255, 255, 0.04);
-  --surface-2: rgba(255, 255, 255, 0.07);
-  --surface-hover: rgba(255, 255, 255, 0.1);
+  --secondary: #0d0d0d;
+  --secondary-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.13);
+  --ring: rgba(255, 255, 255, 0.56);
+  --surface-1: rgba(255, 255, 255, 0.035);
+  --surface-2: rgba(255, 255, 255, 0.065);
+  --surface-hover: rgba(255, 255, 255, 0.11);
   --input-bg: rgba(255, 255, 255, 0.05);
+  --grid-line: rgba(255, 255, 255, 0.055);
 }
 
 html,
@@ -74,7 +79,7 @@ body {
     Consolas,
     "Liberation Mono",
     monospace;
-  background-color: #000;
+  background-color: var(--background);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -89,37 +94,6 @@ select {
 #root {
   position: relative;
   isolation: isolate;
-}
-
-#root::before {
-  content: "";
-  position: fixed;
-  inset: -50vh -50vw;
-  background-image:
-    radial-gradient(1px 1px at 13% 22%, rgba(255, 255, 255, 0.35), transparent 60%),
-    radial-gradient(1px 1px at 27% 58%, rgba(255, 255, 255, 0.2), transparent 60%),
-    radial-gradient(1px 1px at 41% 9%, rgba(255, 255, 255, 0.28), transparent 60%),
-    radial-gradient(1px 1px at 58% 77%, rgba(255, 255, 255, 0.22), transparent 60%),
-    radial-gradient(1px 1px at 71% 33%, rgba(255, 255, 255, 0.32), transparent 60%),
-    radial-gradient(1px 1px at 83% 68%, rgba(255, 255, 255, 0.18), transparent 60%),
-    radial-gradient(1px 1px at 92% 18%, rgba(255, 255, 255, 0.26), transparent 60%),
-    radial-gradient(1px 1px at 8% 87%, rgba(255, 255, 255, 0.22), transparent 60%),
-    radial-gradient(1px 1px at 52% 45%, rgba(255, 255, 255, 0.16), transparent 60%),
-    radial-gradient(1px 1px at 33% 63%, rgba(255, 255, 255, 0.14), transparent 60%);
-  background-size: 720px 720px;
-  background-repeat: repeat;
-  animation: space-drift 320s linear infinite;
-  pointer-events: none;
-  z-index: -1;
-}
-
-@keyframes space-drift {
-  0% {
-    background-position: 0 0;
-  }
-  100% {
-    background-position: -720px -720px;
-  }
 }
 
 /* xterm transparency */
@@ -149,38 +123,39 @@ select {
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 10px 32px rgba(0, 0, 0, 0.5);
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  box-shadow: none;
 }
 
 .glass:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-hover);
 }
 
 .glass-heavy {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 24px 64px rgba(0, 0, 0, 0.6);
+  background: var(--background);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
 }
 
 .glass-chip {
-  background: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(28px) saturate(200%) brightness(115%);
-  -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(115%);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.35);
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+svg {
+  stroke: currentColor;
+}
+
+button svg {
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
+}
+
+button:hover svg {
+  transform: translateY(-1px);
 }
 
 @keyframes prompt-blink {

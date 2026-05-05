@@ -1,6 +1,7 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type AppContext, lookupHandler } from "@/api.ts";
+import { BrowserFrameService } from "@/browserService.ts";
 import { getPaths, getServicePort, getServiceUrl } from "@/paths.ts";
 import { serveWebAsset } from "@/static.ts";
 import { CanvasStore } from "@/store.ts";
@@ -69,6 +70,9 @@ export async function startServer() {
   const store = new CanvasStore();
   await store.ensureInitialized();
   const ctx: AppContext = { store };
+  const browserFrames = new BrowserFrameService(paths.browserProfilesDir, (line) =>
+    logLine(paths.serviceLogFile, `[${new Date().toISOString()}] ${line}`),
+  );
   let shuttingDown = false;
 
   await writeFile(
@@ -80,7 +84,6 @@ export async function startServer() {
         port: getServicePort(),
         url: getServiceUrl(),
         logPath: paths.serviceLogFile,
-        graphPath: paths.graphFile,
         workspacePath: process.cwd(),
       },
       null,
@@ -95,8 +98,10 @@ export async function startServer() {
   type TerminalSession = { cwd: string; buffer: string; queue: Promise<void> };
   const terminals = new WeakMap<object, TerminalSession>();
 
-  type WSData = { cwd: string };
-  const server = Bun.serve<WSData, "/api/terminal/spawn">({
+  type WSData =
+    | { kind: "terminal"; cwd: string }
+    | { kind: "browser"; workspaceId: string; paneId: string };
+  const server = Bun.serve<WSData>({
     port: getServicePort(),
     hostname: "127.0.0.1",
     async fetch(request, srv) {
@@ -121,7 +126,18 @@ export async function startServer() {
 
       if (url.pathname === "/api/terminal/spawn") {
         const cwd = url.searchParams.get("cwd") || paths.root;
-        const upgraded = srv.upgrade(request, { data: { cwd } });
+        const upgraded = srv.upgrade(request, { data: { kind: "terminal", cwd } });
+        if (upgraded) return undefined as unknown as Response;
+        return new Response("websocket upgrade required", { status: 426 });
+      }
+
+      if (url.pathname === "/api/browser/stream") {
+        const workspaceId = url.searchParams.get("workspaceId");
+        const paneId = url.searchParams.get("paneId");
+        if (!workspaceId || !paneId) {
+          return new Response("workspaceId and paneId are required", { status: 400, headers: CORS_HEADERS });
+        }
+        const upgraded = srv.upgrade(request, { data: { kind: "browser", workspaceId, paneId } });
         if (upgraded) return undefined as unknown as Response;
         return new Response("websocket upgrade required", { status: 426 });
       }
@@ -135,11 +151,19 @@ export async function startServer() {
 
     websocket: {
       async open(ws) {
-        const cwd = (ws.data as { cwd?: string } | undefined)?.cwd ?? paths.root;
+        if (ws.data.kind === "browser") {
+          await sendBrowserStateAndFrame(ws, ws.data.workspaceId, ws.data.paneId);
+          return;
+        }
+        const cwd = ws.data.cwd || paths.root;
         terminals.set(ws as unknown as object, { cwd, buffer: "", queue: Promise.resolve() });
         ws.send(`canvas:${cwd}$ `);
       },
       async message(ws, message) {
+        if (ws.data.kind === "browser") {
+          await handleBrowserMessage(ws, message);
+          return;
+        }
         const session = terminals.get(ws as unknown as object);
         if (!session) return;
         const chunk =
@@ -179,6 +203,50 @@ export async function startServer() {
   });
 
   return server;
+
+  async function sendBrowserStateAndFrame(
+    ws: ServerWebSocketLike,
+    workspaceId: string,
+    paneId: string,
+  ) {
+    try {
+      const session = await store.getBrowserSession(workspaceId, paneId);
+      ws.send(JSON.stringify(await browserFrames.stateFor(session)));
+      ws.send(JSON.stringify(await browserFrames.frameFor(session)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ws.send(JSON.stringify({ type: "error", message }));
+    }
+  }
+
+  async function handleBrowserMessage(
+    ws: ServerWebSocketLike & { data: WSData },
+    message: string | BufferSource,
+  ) {
+    if (ws.data.kind !== "browser") return;
+    const source = typeof message === "string" ? message : new TextDecoder().decode(bufferSourceToBytes(message));
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source);
+    } catch {
+      ws.send(JSON.stringify({ type: "error", message: "invalid browser message json" }));
+      return;
+    }
+    const command = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    if (command.type === "navigate" && typeof command.url === "string") {
+      await store.navigateBrowserPane({
+        workspaceId: ws.data.workspaceId,
+        paneId: ws.data.paneId,
+        url: command.url,
+      });
+    }
+    await sendBrowserStateAndFrame(ws, ws.data.workspaceId, ws.data.paneId);
+  }
+}
+
+function bufferSourceToBytes(source: BufferSource): Uint8Array {
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
+  return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
 }
 
 async function runTerminalLine(

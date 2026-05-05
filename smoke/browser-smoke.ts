@@ -23,52 +23,74 @@ afterAll(async () => {
   if (canvasHome) await rm(canvasHome, { recursive: true, force: true });
 });
 
-test("launches web app and exercises session, filesystem, search, and graph APIs", async () => {
+test("launches web app and exercises workspace, filesystem, git, and browser APIs", async () => {
   const baseUrl = `http://127.0.0.1:${port}`;
   const html = await fetch(`${baseUrl}/`).then((response) => response.text());
   expect(html.toLowerCase()).toContain("<!doctype html>");
 
-  const list = await post<{ activeSessionId: string; sessions: Array<{ id: string; label: string }> }>(
+  const list = await post<{ activeWorkspaceId: string; workspaces: Array<{ id: string; label: string }> }>(
     baseUrl,
-    "session.list",
+    "workspace.list",
   );
-  expect(list.sessions).toHaveLength(1);
+  expect(list.workspaces).toHaveLength(1);
 
-  const second = await post<{ session: { id: string; label: string; address: string } }>(baseUrl, "session.create", {
+  const second = await post<{ workspace: { id: string; label: string; panes: Array<{ id: string }> } }>(baseUrl, "workspace.create", {
     label: "Smoke 2",
     rootPath: process.cwd(),
   });
-  expect(second.session.label).toBe("Smoke 2");
+  expect(second.workspace.label).toBe("Smoke 2");
 
-  const active = await post<{ session: { id: string } }>(baseUrl, "session.setActive", { id: second.session.id });
-  expect(active.session.id).toBe(second.session.id);
+  const active = await post<{ workspace: { id: string } }>(baseUrl, "workspace.setActive", { id: second.workspace.id });
+  expect(active.workspace.id).toBe(second.workspace.id);
 
   const tree = await post<{ entries: Array<{ name: string; path: string; kind: string }> }>(baseUrl, "fs.tree", {
     path: process.cwd(),
   });
   expect(tree.entries.length).toBeGreaterThan(0);
 
-  const graph = await post<{ result: { ok: boolean; steps: unknown[]; issues: unknown[] } }>(
-    baseUrl,
-    "graph.execute",
-    {
-      graph: {
-        version: 1,
-        nodes: [
-          {
-            id: "graph-terminal-run-smoke",
-            kind: "terminal.run",
-            position: { x: 120, y: 420 },
-            config: { cwd: process.cwd(), command: "pwd", timeoutMs: 10_000 },
-          },
-        ],
-        edges: [],
-        updatedAt: new Date().toISOString(),
+  const repos = await post<{ repositories: Array<{ rootPath: string }> }>(baseUrl, "git.repositories", {
+    rootPath: process.cwd(),
+  });
+  expect(Array.isArray(repos.repositories)).toBe(true);
+
+  const now = new Date().toISOString();
+  const browserPane = {
+    id: "browser:smoke",
+    type: "browser",
+    title: "Smoke Browser",
+    url: "about:blank",
+    history: ["about:blank"],
+    historyIndex: 0,
+    sessionId: "browser:smoke:session",
+    placement: "tiled",
+    rect: { x: 0, y: 0, width: 800, height: 500 },
+    z: 2,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const withBrowser = await post<{ workspace: { id: string } }>(baseUrl, "workspace.save", {
+    workspace: {
+      ...second.workspace,
+      panes: [...second.workspace.panes, browserPane],
+      tiledLayout: {
+        type: "split",
+        id: "split:smoke",
+        direction: "horizontal",
+        ratio: 0.5,
+        first: { type: "leaf", paneId: second.workspace.panes[0]?.id ?? "missing" },
+        second: { type: "leaf", paneId: browserPane.id },
       },
     },
-  );
-  expect(graph.result.ok).toBe(true);
-  expect(graph.result.steps).toHaveLength(1);
+  });
+  expect(withBrowser.workspace.id).toBe(second.workspace.id);
+
+  const browser = await post<{ browser: { url: string; profilePath: string } }>(baseUrl, "browser.navigate", {
+    workspaceId: second.workspace.id,
+    paneId: browserPane.id,
+    url: "data:text/html,<title>Smoke</title><h1>Canvas Browser</h1>",
+  });
+  expect(browser.browser.url).toContain("data:text/html");
+  expect(browser.browser.profilePath).toContain(encodeURIComponent(second.workspace.id));
 });
 
 async function post<T>(baseUrl: string, path: string, input?: unknown): Promise<T> {

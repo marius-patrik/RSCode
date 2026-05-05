@@ -3,8 +3,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/index.css";
 
-if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+const storedTheme = window.localStorage.getItem("canvas-theme");
+if (storedTheme !== "light") {
   document.documentElement.classList.add("dark");
+  document.documentElement.dataset.theme = "dark";
+} else {
+  document.documentElement.dataset.theme = "light";
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

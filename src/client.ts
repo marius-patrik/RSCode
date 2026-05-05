@@ -2,7 +2,7 @@
 // API is preserved for source compatibility:
 //
 //   client.fs.tree.query({ path: "/" })
-//   client.graph.execute.mutate({ graph })
+//   client.workspace.save.mutate({ workspace })
 //
 // `.query()` and `.mutate()` are aliases — both POST to /api/<path>.
 

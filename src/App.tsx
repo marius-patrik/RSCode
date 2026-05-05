@@ -1,10 +1,15 @@
 import type { ActionGroup } from "@/ActionsMenu.tsx";
 import { Canvas, type FsEntry } from "@/Canvas.tsx";
 import { Dock } from "@/Dock.tsx";
-import { makeBrowserClient } from "@/client.ts";
-import type { CanvasSession, CanvasSessionSummary, GraphExecutionResult, GraphIssue } from "@/schema.ts";
-import { motion } from "motion/react";
+import { makeClient } from "@/client.ts";
+import type { GitDiff, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/schema.ts";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+type CanvasMountProps = {
+  baseUrl?: string;
+  initialWorkspaceId?: string;
+  className?: string;
+};
 
 type AppModal =
   | {
@@ -21,27 +26,37 @@ type AppModal =
       onConfirm: () => void;
     };
 
-export default function App() {
-  const client = useMemo(() => makeBrowserClient(), []);
-  const [sessions, setSessions] = useState<CanvasSessionSummary[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [activeSession, setActiveSession] = useState<CanvasSession | null>(null);
+export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMountProps) {
+  const client = useMemo(() => makeClient(baseUrl), [baseUrl]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [fileTrees, setFileTrees] = useState<Map<string, FsEntry[]>>(() => new Map());
-  const [graphIssues, setGraphIssues] = useState<GraphIssue[]>([]);
-  const [lastRun, setLastRun] = useState<GraphExecutionResult | null>(null);
+  const [repositories, setRepositories] = useState<GitRepository[]>([]);
+  const [gitStatuses, setGitStatuses] = useState<Map<string, GitStatus>>(() => new Map());
   const [commandGroups, setCommandGroups] = useState<ActionGroup[]>([]);
   const [commandQuery, setCommandQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<AppModal | null>(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("canvas-theme") !== "light";
+  });
 
-  const refreshSessions = useCallback(async () => {
-    const result = (await client.session.list.query()) as {
-      activeSessionId: string;
-      sessions: CanvasSessionSummary[];
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    window.localStorage.setItem("canvas-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
+  const refreshWorkspaces = useCallback(async () => {
+    const result = (await client.workspace.list.query()) as {
+      activeWorkspaceId: string;
+      workspaces: WorkspaceSummary[];
     };
-    setSessions(result.sessions);
-    setActiveSessionId(result.activeSessionId);
+    setWorkspaces(result.workspaces);
+    setActiveWorkspaceId(result.activeWorkspaceId);
     return result;
   }, [client]);
 
@@ -49,14 +64,12 @@ export default function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const list = await refreshSessions();
-        const active = (await client.session.get.query({ id: list.activeSessionId })) as { session: CanvasSession };
+        const list = await refreshWorkspaces();
+        const id = initialWorkspaceId ?? list.activeWorkspaceId;
+        const response = (await client.workspace.get.query({ id })) as { workspace: Workspace };
         if (cancelled) return;
-        setActiveSession(active.session);
-        const validation = (await client.graph.validate.query({ graph: active.session.graph })) as {
-          issues: GraphIssue[];
-        };
-        if (!cancelled) setGraphIssues(validation.issues);
+        setActiveWorkspace(response.workspace);
+        setActiveWorkspaceId(response.workspace.id);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
@@ -64,7 +77,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [client, refreshSessions]);
+  }, [client, initialWorkspaceId, refreshWorkspaces]);
 
   const onRequestTree = useCallback(
     (path: string) => {
@@ -120,21 +133,14 @@ export default function App() {
     [client],
   );
 
-  const onSessionChange = useCallback(
-    (nextSession: CanvasSession) => {
-      setActiveSession(nextSession);
-      setSessions((prev) => prev.map((session) => (session.id === nextSession.id ? summarizeSession(nextSession) : session)));
+  const onRequestRepositories = useCallback(
+    (rootPath: string) => {
       void (async () => {
         try {
-          const saved = (await client.session.save.mutate({ session: nextSession })) as { session: CanvasSession };
-          setActiveSession((current) => (current?.id === saved.session.id ? saved.session : current));
-          setSessions((prev) =>
-            prev.map((session) => (session.id === saved.session.id ? summarizeSession(saved.session) : session)),
-          );
-          const validation = (await client.graph.validate.query({ graph: saved.session.graph })) as {
-            issues: GraphIssue[];
+          const result = (await client.git.repositories.query({ rootPath })) as {
+            repositories: GitRepository[];
           };
-          setGraphIssues(validation.issues);
+          setRepositories(result.repositories);
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
         }
@@ -143,60 +149,114 @@ export default function App() {
     [client],
   );
 
-  const switchSession = useCallback(
+  const onRequestGitStatus = useCallback(
+    async (repoPath: string) => {
+      const result = (await client.git.status.query({ repoPath })) as { status: GitStatus };
+      setGitStatuses((prev) => {
+        const next = new Map(prev);
+        next.set(repoPath, result.status);
+        return next;
+      });
+      return result.status;
+    },
+    [client],
+  );
+
+  const onRequestGitDiff = useCallback(
+    async (repoPath: string, path: string) => {
+      const result = (await client.git.diff.query({ repoPath, path })) as { diff: GitDiff };
+      return result.diff;
+    },
+    [client],
+  );
+
+  const onBrowserNavigate = useCallback(
+    async (workspaceId: string, paneId: string, url: string) => {
+      const result = (await client.browser.navigate.mutate({ workspaceId, paneId, url })) as {
+        workspace: Workspace;
+      };
+      setActiveWorkspace((current) => (current?.id === result.workspace.id ? result.workspace : current));
+      setWorkspaces((prev) =>
+        prev.map((workspace) => (workspace.id === result.workspace.id ? summarizeWorkspace(result.workspace) : workspace)),
+      );
+    },
+    [client],
+  );
+
+  const onWorkspaceChange = useCallback(
+    (nextWorkspace: Workspace) => {
+      setActiveWorkspace(nextWorkspace);
+      setWorkspaces((prev) =>
+        prev.map((workspace) => (workspace.id === nextWorkspace.id ? summarizeWorkspace(nextWorkspace) : workspace)),
+      );
+      void (async () => {
+        try {
+          const saved = (await client.workspace.save.mutate({ workspace: nextWorkspace })) as { workspace: Workspace };
+          setActiveWorkspace((current) => (current?.id === saved.workspace.id ? saved.workspace : current));
+          setWorkspaces((prev) =>
+            prev.map((workspace) => (workspace.id === saved.workspace.id ? summarizeWorkspace(saved.workspace) : workspace)),
+          );
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    },
+    [client],
+  );
+
+  const switchWorkspace = useCallback(
     async (id: string) => {
-      if (id === activeSessionId) return;
+      if (id === activeWorkspaceId) return;
       setBusy(true);
       try {
-        const response = (await client.session.setActive.mutate({ id })) as { session: CanvasSession };
-        setActiveSession(response.session);
-        setActiveSessionId(response.session.id);
-        setLastRun(null);
+        const response = (await client.workspace.setActive.mutate({ id })) as { workspace: Workspace };
+        setActiveWorkspace(response.workspace);
+        setActiveWorkspaceId(response.workspace.id);
         setCommandQuery("");
-        await refreshSessions();
-        const validation = (await client.graph.validate.query({ graph: response.session.graph })) as {
-          issues: GraphIssue[];
-        };
-        setGraphIssues(validation.issues);
+        setFileTrees(new Map());
+        setRepositories([]);
+        setGitStatuses(new Map());
+        await refreshWorkspaces();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setBusy(false);
       }
     },
-    [activeSessionId, client, refreshSessions],
+    [activeWorkspaceId, client, refreshWorkspaces],
   );
 
-  const createSession = useCallback(async () => {
+  const createWorkspace = useCallback(async () => {
     setBusy(true);
     try {
-      const response = (await client.session.create.mutate({})) as { session: CanvasSession };
-      setActiveSession(response.session);
-      setActiveSessionId(response.session.id);
-      setLastRun(null);
-      setGraphIssues([]);
-      await refreshSessions();
+      const response = (await client.workspace.create.mutate({})) as { workspace: Workspace };
+      setActiveWorkspace(response.workspace);
+      setActiveWorkspaceId(response.workspace.id);
+      setFileTrees(new Map());
+      setRepositories([]);
+      setGitStatuses(new Map());
+      await refreshWorkspaces();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [client, refreshSessions]);
+  }, [client, refreshWorkspaces]);
 
-  const renameSession = useCallback(
+  const renameWorkspace = useCallback(
     (id: string) => {
-      const session = sessions.find((candidate) => candidate.id === id);
-      if (!session) return;
+      const workspace = workspaces.find((candidate) => candidate.id === id);
+      if (!workspace) return;
       setModal({
         kind: "rename",
-        title: "Rename Canvas",
-        label: session.label,
+        title: "Rename Workspace",
+        label: workspace.label,
         onSubmit: (label) => {
           void (async () => {
             try {
-              const response = (await client.session.rename.mutate({ id, label })) as { session: CanvasSession };
-              if (response.session.id === activeSession?.id) setActiveSession(response.session);
-              await refreshSessions();
+              const response = (await client.workspace.rename.mutate({ id, label })) as { workspace: Workspace };
+              if (response.workspace.id === activeWorkspace?.id) setActiveWorkspace(response.workspace);
+              await refreshWorkspaces();
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err));
             }
@@ -204,34 +264,35 @@ export default function App() {
         },
       });
     },
-    [activeSession?.id, client, refreshSessions, sessions],
+    [activeWorkspace?.id, client, refreshWorkspaces, workspaces],
   );
 
-  const closeSession = useCallback(
+  const closeWorkspace = useCallback(
     (id: string) => {
-      const session = sessions.find((candidate) => candidate.id === id);
-      if (!session) return;
+      const workspace = workspaces.find((candidate) => candidate.id === id);
+      if (!workspace) return;
       setModal({
         kind: "confirm",
-        title: "Close Canvas",
-        message: session.label,
+        title: "Close Workspace",
+        message: workspace.label,
         confirmLabel: "Close",
         onConfirm: () => {
           void (async () => {
             setBusy(true);
             try {
-              const response = (await client.session.close.mutate({ id })) as {
-                activeSessionId: string;
-                sessions: CanvasSessionSummary[];
+              const response = (await client.workspace.close.mutate({ id })) as {
+                activeWorkspaceId: string;
+                workspaces: WorkspaceSummary[];
               };
-              setSessions(response.sessions);
-              setActiveSessionId(response.activeSessionId);
-              const active = (await client.session.get.query({ id: response.activeSessionId })) as {
-                session: CanvasSession;
+              setWorkspaces(response.workspaces);
+              setActiveWorkspaceId(response.activeWorkspaceId);
+              const active = (await client.workspace.get.query({ id: response.activeWorkspaceId })) as {
+                workspace: Workspace;
               };
-              setActiveSession(active.session);
-              setLastRun(null);
-              setGraphIssues([]);
+              setActiveWorkspace(active.workspace);
+              setFileTrees(new Map());
+              setRepositories([]);
+              setGitStatuses(new Map());
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err));
             } finally {
@@ -241,34 +302,7 @@ export default function App() {
         },
       });
     },
-    [client, sessions],
-  );
-
-  const executeGraph = useCallback(
-    async (nodeId?: string) => {
-      if (!activeSession) return;
-      setBusy(true);
-      try {
-        const response = await client.graph.execute.mutate({
-          graph: activeSession.graph,
-          nodeId: nodeId ?? null,
-        });
-        const result = response.result as GraphExecutionResult;
-        setLastRun(result);
-        setGraphIssues(result.issues);
-        if (!result.ok && result.issues.length === 0) {
-          const failed = result.steps.find((step) => step.status === "failed");
-          setError(failed?.error ?? "graph execution failed");
-        } else {
-          setError(null);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [activeSession, client],
+    [client, workspaces],
   );
 
   const onCommandSubmit = useCallback(
@@ -288,23 +322,25 @@ export default function App() {
     [commandGroups, commandQuery],
   );
 
+  const toggleActiveView = useCallback(() => {
+    if (!activeWorkspace) return;
+    onWorkspaceChange({
+      ...activeWorkspace,
+      activeView: activeWorkspace.activeView === "panes" ? "canvas" : "panes",
+    });
+  }, [activeWorkspace, onWorkspaceChange]);
+
   return (
-    <div className="relative h-screen overflow-hidden">
-      <main className="relative h-full overflow-hidden">
-        <motion.div
-          key={activeSession?.id ?? "loading"}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
-          className="h-full"
-        >
-          {activeSession ? (
+    <div className={className ?? "relative h-screen overflow-hidden"}>
+      <main className="relative h-[calc(100%-3rem)] overflow-hidden">
+        <div key={activeWorkspace?.id ?? "loading"} className="h-full">
+          {activeWorkspace ? (
             <Canvas
-              session={activeSession}
+              workspace={activeWorkspace}
               fileTrees={fileTrees}
-              graphIssues={graphIssues}
-              lastRun={lastRun}
-              onSessionChange={onSessionChange}
+              repositories={repositories}
+              gitStatuses={gitStatuses}
+              onWorkspaceChange={onWorkspaceChange}
               onCommandGroupsChange={setCommandGroups}
               onRequestTree={onRequestTree}
               onReadFile={onReadFile}
@@ -312,26 +348,33 @@ export default function App() {
               onMkdir={onMkdir}
               onCreateFile={onCreateFile}
               onDeleteEntry={onDeleteEntry}
-              onExecuteGraph={executeGraph}
+              onRequestRepositories={onRequestRepositories}
+              onRequestGitStatus={onRequestGitStatus}
+              onRequestGitDiff={onRequestGitDiff}
+              onBrowserNavigate={onBrowserNavigate}
             />
           ) : (
-            <div className="flex h-full items-center justify-center bg-[#090d12] font-mono text-sm text-muted-foreground">
-              loading canvas
+            <div className="flex h-full items-center justify-center bg-background font-mono text-sm text-muted-foreground">
+              loading workspace
             </div>
           )}
-        </motion.div>
+        </div>
       </main>
 
       {error ? <ErrorToast message={error} onDismiss={() => setError(null)} /> : null}
 
       <Dock
         busy={busy}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        onSwitchSession={(id) => void switchSession(id)}
-        onCreateSession={() => void createSession()}
-        onRenameSession={renameSession}
-        onCloseSession={closeSession}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        activeView={activeWorkspace?.activeView ?? "panes"}
+        darkMode={darkMode}
+        onSwitchWorkspace={(id) => void switchWorkspace(id)}
+        onCreateWorkspace={() => void createWorkspace()}
+        onRenameWorkspace={renameWorkspace}
+        onCloseWorkspace={closeWorkspace}
+        onToggleView={toggleActiveView}
+        onToggleTheme={() => setDarkMode((current) => !current)}
         commandQuery={commandQuery}
         onCommandQueryChange={setCommandQuery}
         commandGroups={commandGroups}
@@ -343,12 +386,16 @@ export default function App() {
   );
 }
 
+export default function App() {
+  return <CanvasMount />;
+}
+
 function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   return (
     <button
       type="button"
       onClick={onDismiss}
-      className="glass-heavy fixed right-4 top-4 z-[90] max-w-md rounded-lg border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-left text-sm text-rose-100 shadow-2xl"
+      className="fixed right-4 top-4 z-[90] max-w-md rounded-md border border-border bg-secondary px-4 py-3 text-left text-sm text-foreground shadow-lg"
     >
       {message}
     </button>
@@ -358,9 +405,9 @@ function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => 
 function AppModalView({ modal, onClose }: { modal: AppModal; onClose: () => void }) {
   const [value, setValue] = useState(modal.kind === "rename" ? modal.label : "");
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/45 backdrop-blur-sm" data-context-menu>
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-background/80" data-context-menu>
       <form
-        className="glass-heavy w-[380px] max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 p-4 shadow-2xl"
+        className="w-[380px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-background p-4 shadow-xl"
         onSubmit={(event) => {
           event.preventDefault();
           if (modal.kind === "rename") {
@@ -378,7 +425,7 @@ function AppModalView({ modal, onClose }: { modal: AppModal; onClose: () => void
           <input
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            className="mt-4 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-sky-400/50"
+            className="mt-4 w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         ) : (
           <div className="mt-2 break-all text-sm text-muted-foreground">{modal.message}</div>
@@ -387,11 +434,11 @@ function AppModalView({ modal, onClose }: { modal: AppModal; onClose: () => void
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             Cancel
           </button>
-          <button type="submit" className="rounded-md bg-sky-500/80 px-3 py-1.5 text-sm text-white hover:bg-sky-500">
+          <button type="submit" className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground">
             {modal.kind === "rename" ? "Rename" : modal.confirmLabel}
           </button>
         </div>
@@ -400,17 +447,16 @@ function AppModalView({ modal, onClose }: { modal: AppModal; onClose: () => void
   );
 }
 
-function summarizeSession(session: CanvasSession): CanvasSessionSummary {
+function summarizeWorkspace(workspace: Workspace): WorkspaceSummary {
   return {
-    id: session.id,
-    label: session.label,
-    rootPath: session.rootPath,
-    address: session.address,
-    panelCount: session.openPanels.length,
-    graphNodeCount: session.graph.nodes.length,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    lastOpenedAt: session.lastOpenedAt,
+    id: workspace.id,
+    label: workspace.label,
+    rootPath: workspace.rootPath,
+    activeView: workspace.activeView,
+    paneCount: workspace.panes.length,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
+    lastOpenedAt: workspace.lastOpenedAt,
   };
 }
 

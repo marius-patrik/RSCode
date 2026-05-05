@@ -1,6 +1,5 @@
-import { canvasGraphSchema, canvasSessionSchema } from "@/schema.ts";
+import { workspaceSchema } from "@/schema.ts";
 import {
-  type CanvasStore,
   createFsFile,
   deleteFsEntry,
   listFsTree,
@@ -8,6 +7,7 @@ import {
   readFsFile,
   writeFsFile,
 } from "@/store.ts";
+import type { CanvasStore } from "@/store.ts";
 import { z } from "zod";
 
 export type AppContext = { store: CanvasStore };
@@ -21,6 +21,8 @@ function schema<T>(
 }
 
 const fsPathSchema = z.string().min(1);
+const workspaceIdSchema = z.string().trim().min(1);
+const paneIdSchema = z.string().trim().min(1);
 
 export const api = {
   health: () => ({ ok: true, ts: Date.now() }),
@@ -61,52 +63,95 @@ export const api = {
     }),
   },
 
-  session: {
-    list: async (ctx: AppContext) => ctx.store.listSessions(),
-    active: async (ctx: AppContext) => ({ session: await ctx.store.getActiveSession() }),
-    get: schema(z.object({ id: z.string().trim().min(1) }), async (ctx, input) => ({
-      session: await ctx.store.getSession(input.id),
+  workspace: {
+    list: async (ctx: AppContext) => ctx.store.listWorkspaces(),
+    active: async (ctx: AppContext) => ({ workspace: await ctx.store.getActiveWorkspace() }),
+    get: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => ({
+      workspace: await ctx.store.getWorkspace(input.id),
     })),
     create: schema(
       z.object({
         label: z.string().trim().min(1).optional(),
         rootPath: z.string().trim().min(1).optional(),
       }),
-      async (ctx, input) => ({ session: await ctx.store.createSession(input) }),
+      async (ctx, input) => ({ workspace: await ctx.store.createWorkspace(input) }),
     ),
-    save: schema(z.object({ session: canvasSessionSchema }), async (ctx, input) => ({
-      session: await ctx.store.saveSession(input.session),
+    save: schema(z.object({ workspace: workspaceSchema }), async (ctx, input) => ({
+      workspace: await ctx.store.saveWorkspace(input.workspace),
     })),
     rename: schema(
-      z.object({ id: z.string().trim().min(1), label: z.string().trim().min(1) }),
-      async (ctx, input) => ({ session: await ctx.store.renameSession(input.id, input.label) }),
+      z.object({ id: workspaceIdSchema, label: z.string().trim().min(1) }),
+      async (ctx, input) => ({ workspace: await ctx.store.renameWorkspace(input.id, input.label) }),
     ),
-    setActive: schema(z.object({ id: z.string().trim().min(1) }), async (ctx, input) => ({
-      session: await ctx.store.setActiveSession(input.id),
+    setActive: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => ({
+      workspace: await ctx.store.setActiveWorkspace(input.id),
     })),
-    close: schema(z.object({ id: z.string().trim().min(1) }), async (ctx, input) =>
-      ctx.store.closeSession(input.id),
+    close: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) =>
+      ctx.store.closeWorkspace(input.id),
     ),
   },
 
-  graph: {
-    get: async (ctx: AppContext) => ({ graph: await ctx.store.loadGraph() }),
-    save: schema(z.object({ graph: canvasGraphSchema }), async (ctx, input) => ({
-      graph: await ctx.store.saveGraph(input.graph),
+  session: {
+    list: async (ctx: AppContext) => ctx.store.listWorkspaces(),
+    active: async (ctx: AppContext) => ({ session: await ctx.store.getActiveWorkspace() }),
+    get: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => ({
+      session: await ctx.store.getWorkspace(input.id),
     })),
-    validate: schema(z.object({ graph: canvasGraphSchema }), (ctx, input) => ({
-      issues: ctx.store.validateGraph(input.graph),
-    })),
-    execute: schema(
+    create: schema(
       z.object({
-        graph: canvasGraphSchema.optional(),
-        nodeId: z.string().nullable().optional(),
+        label: z.string().trim().min(1).optional(),
+        rootPath: z.string().trim().min(1).optional(),
       }),
-      async (ctx, input) => {
-        const graph = input.graph ?? (await ctx.store.loadGraph());
-        const result = await ctx.store.executeGraph(graph, input.nodeId ?? null);
-        return { result };
-      },
+      async (ctx, input) => ({ session: await ctx.store.createWorkspace(input) }),
+    ),
+    save: schema(z.object({ session: workspaceSchema }), async (ctx, input) => ({
+      session: await ctx.store.saveWorkspace(input.session),
+    })),
+    rename: schema(
+      z.object({ id: workspaceIdSchema, label: z.string().trim().min(1) }),
+      async (ctx, input) => ({ session: await ctx.store.renameWorkspace(input.id, input.label) }),
+    ),
+    setActive: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => ({
+      session: await ctx.store.setActiveWorkspace(input.id),
+    })),
+    close: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => {
+      const result = await ctx.store.closeWorkspace(input.id);
+      return {
+        activeSessionId: result.activeWorkspaceId,
+        sessions: result.workspaces,
+      };
+    }),
+  },
+
+  git: {
+    repositories: schema(
+      z.object({ rootPath: fsPathSchema, depth: z.number().int().min(0).max(10).optional() }),
+      async (ctx, input) => ({
+        repositories: await ctx.store.listGitRepositories(input.rootPath, input.depth),
+      }),
+    ),
+    status: schema(z.object({ repoPath: fsPathSchema }), async (ctx, input) => ({
+      status: await ctx.store.getGitStatus(input.repoPath),
+    })),
+    diff: schema(
+      z.object({ repoPath: fsPathSchema, path: z.string().default(".") }),
+      async (ctx, input) => ({ diff: await ctx.store.getGitDiff(input.repoPath, input.path) }),
+    ),
+  },
+
+  browser: {
+    session: schema(
+      z.object({ workspaceId: workspaceIdSchema, paneId: paneIdSchema }),
+      async (ctx, input) => ({ browser: await ctx.store.getBrowserSession(input.workspaceId, input.paneId) }),
+    ),
+    navigate: schema(
+      z.object({
+        workspaceId: workspaceIdSchema,
+        paneId: paneIdSchema,
+        url: z.string().min(1),
+        replace: z.boolean().optional(),
+      }),
+      async (ctx, input) => ctx.store.navigateBrowserPane(input),
     ),
   },
 } as const;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-// xterm.js terminal hosted inside a ReactFlow node. Lazy-imports the
+// xterm.js terminal hosted inside a workspace pane. Lazy-imports the
 // xterm bundle on mount so the main chunk stays small. Talks to the
 // /api/terminal/spawn WebSocket — server-side spawns a Bun.spawn shell
 // at the requested cwd, pipes stdout/stderr → ws.send and ws.message →

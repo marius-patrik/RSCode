@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lookupHandler } from "@/api.ts";
 import type { AppContext } from "@/api.ts";
-import type { CanvasSession } from "@/schema.ts";
-import { CanvasStore, validateGraph } from "@/store.ts";
+import type { Workspace } from "@/schema.ts";
+import { CanvasStore } from "@/store.ts";
 
 let canvasHome = "";
 
@@ -19,111 +19,200 @@ afterEach(async () => {
   if (canvasHome) await rm(canvasHome, { recursive: true, force: true });
 });
 
-test("creates and persists an initial canvas session", async () => {
+test("creates and persists an initial workspace", async () => {
   const store = new CanvasStore();
   await store.ensureInitialized();
 
-  const list = await store.listSessions();
-  expect(list.sessions).toHaveLength(1);
-  expect(list.sessions[0]?.label).toBe("Canvas 1");
-  expect(list.sessions[0]?.rootPath).toBe(process.cwd());
+  const list = await store.listWorkspaces();
+  expect(list.workspaces).toHaveLength(1);
+  expect(list.workspaces[0]?.label).toBe("Workspace 1");
+  expect(list.workspaces[0]?.rootPath).toBe(process.cwd());
 
-  const active = await store.getActiveSession();
-  expect(active.id).toBe(list.activeSessionId);
-  expect(active.address).toBe(process.cwd());
-  expect(active.openPanels).toEqual([]);
+  const active = await store.getActiveWorkspace();
+  expect(active.id).toBe(list.activeWorkspaceId);
+  expect(active.rootPath).toBe(process.cwd());
+  expect(active.activeView).toBe("panes");
+  expect(active.panes[0]?.type).toBe("explorer");
+  expect(active.tiledLayout?.type).toBe("leaf");
 });
 
-test("imports legacy graph into first session when no sessions exist", async () => {
+test("migrates legacy sessions to workspaces and discards graph data", async () => {
+  const sessionsDir = join(canvasHome, "sessions");
+  await mkdir(sessionsDir, { recursive: true });
   await writeFile(
-    join(canvasHome, "graph.json"),
+    join(sessionsDir, "index.json"),
     JSON.stringify({
       version: 1,
-      nodes: [
+      activeSessionId: "legacy",
+      sessionIds: ["legacy"],
+    }),
+  );
+  await writeFile(
+    join(sessionsDir, "legacy.json"),
+    JSON.stringify({
+      id: "legacy",
+      label: "Legacy Canvas",
+      rootPath: process.cwd(),
+      address: process.cwd(),
+      openPanels: [
         {
-          id: "graph-fs-read-legacy",
-          kind: "fs.read",
-          position: { x: 10, y: 20 },
-          config: { path: "/tmp/example.txt" },
+          id: "editor:legacy",
+          kind: "editor",
+          title: "legacy.txt",
+          path: join(process.cwd(), "legacy.txt"),
+          draftBody: "draft",
+          dirty: true,
+          rect: { x: 10, y: 20, width: 500, height: 300 },
+          z: 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         },
       ],
-      edges: [],
+      graph: {
+        version: 1,
+        nodes: [{ id: "graph-fs-read-legacy", kind: "fs.read" }],
+        edges: [],
+      },
+      viewport: { x: 0, y: 0, zoom: 1 },
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      lastOpenedAt: new Date().toISOString(),
     }),
   );
 
   const store = new CanvasStore();
   await store.ensureInitialized();
-  const active = await store.getActiveSession();
-  expect(active.graph.nodes).toHaveLength(1);
-  expect(active.graph.nodes[0]?.id).toBe("graph-fs-read-legacy");
+  const active = await store.getActiveWorkspace();
+  expect(active.label).toBe("Legacy Canvas");
+  expect(active.panes.some((pane) => pane.type === "editor")).toBe(true);
+  expect("graph" in (active as unknown as Record<string, unknown>)).toBe(false);
 });
 
-test("switches, saves, and closes sessions", async () => {
+test("switches, saves, and closes workspaces", async () => {
   const store = new CanvasStore();
   await store.ensureInitialized();
-  const created = await store.createSession({ label: "Work", rootPath: "/" });
-  expect((await store.listSessions()).activeSessionId).toBe(created.id);
+  const created = await store.createWorkspace({ label: "Work", rootPath: "/" });
+  expect((await store.listWorkspaces()).activeWorkspaceId).toBe(created.id);
 
-  const saved = await store.saveSession({
+  const saved = await store.saveWorkspace({
     ...created,
-    address: "/tmp",
-    expandedPaths: ["/tmp"],
+    activeView: "canvas",
+    canvasViewport: { x: 20, y: 30, zoom: 1.2 },
   });
-  expect(saved.address).toBe("/tmp");
-  expect((await store.getSession(created.id)).expandedPaths).toEqual(["/tmp"]);
+  expect(saved.activeView).toBe("canvas");
+  expect((await store.getWorkspace(created.id)).canvasViewport.x).toBe(20);
 
-  const closed = await store.closeSession(created.id);
-  expect(closed.sessions.some((session) => session.id === created.id)).toBe(false);
-  expect(closed.activeSessionId).toBeTruthy();
+  const closed = await store.closeWorkspace(created.id);
+  expect(closed.workspaces.some((workspace) => workspace.id === created.id)).toBe(false);
+  expect(closed.activeWorkspaceId).toBeTruthy();
 });
 
-test("session API handlers expose list, create, save, and close contracts", async () => {
+test("workspace API handlers expose list, create, save, and close contracts", async () => {
   const store = new CanvasStore();
   await store.ensureInitialized();
   const ctx: AppContext = { store };
 
-  const create = lookupHandler("session.create");
-  const list = lookupHandler("session.list");
-  const save = lookupHandler("session.save");
-  const close = lookupHandler("session.close");
+  const create = lookupHandler("workspace.create");
+  const list = lookupHandler("workspace.list");
+  const save = lookupHandler("workspace.save");
+  const close = lookupHandler("workspace.close");
   expect(create).toBeFunction();
   expect(list).toBeFunction();
   expect(save).toBeFunction();
   expect(close).toBeFunction();
 
-  const created = (await create?.(ctx, { label: "API Canvas", rootPath: "/" })) as { session: CanvasSession };
-  expect(created.session.label).toBe("API Canvas");
+  const created = (await create?.(ctx, { label: "API Workspace", rootPath: "/" })) as { workspace: Workspace };
+  expect(created.workspace.label).toBe("API Workspace");
 
-  const saved = (await save?.(ctx, { session: { ...created.session, address: "/tmp" } })) as {
-    session: CanvasSession;
+  const saved = (await save?.(ctx, { workspace: { ...created.workspace, activeView: "canvas" } })) as {
+    workspace: Workspace;
   };
-  expect(saved.session.address).toBe("/tmp");
+  expect(saved.workspace.activeView).toBe("canvas");
 
-  const listed = (await list?.(ctx, undefined)) as Awaited<ReturnType<CanvasStore["listSessions"]>>;
-  expect(listed.sessions.length).toBeGreaterThanOrEqual(2);
+  const listed = (await list?.(ctx, undefined)) as Awaited<ReturnType<CanvasStore["listWorkspaces"]>>;
+  expect(listed.workspaces.length).toBeGreaterThanOrEqual(2);
 
-  const closed = (await close?.(ctx, { id: created.session.id })) as Awaited<
-    ReturnType<CanvasStore["closeSession"]>
+  const closed = (await close?.(ctx, { id: created.workspace.id })) as Awaited<
+    ReturnType<CanvasStore["closeWorkspace"]>
   >;
-  expect(closed.sessions.some((session) => session.id === created.session.id)).toBe(false);
+  expect(closed.workspaces.some((workspace) => workspace.id === created.workspace.id)).toBe(false);
 });
 
-test("graph validation catches required config before execution", () => {
-  const issues = validateGraph({
-    version: 1,
-    nodes: [
-      {
-        id: "graph-terminal-run-empty",
-        kind: "terminal.run",
-        position: { x: 0, y: 0 },
-        config: {},
-      },
-    ],
-    edges: [],
-    updatedAt: new Date().toISOString(),
+test("discovers git repositories and returns readonly status and diff", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "canvas-git-"));
+  try {
+    await run("git", ["init"], repo);
+    await run("git", ["config", "user.email", "test@example.com"], repo);
+    await run("git", ["config", "user.name", "Test User"], repo);
+    await writeFile(join(repo, "file.txt"), "one\n");
+    await run("git", ["add", "file.txt"], repo);
+    await run("git", ["commit", "-m", "initial"], repo);
+    await writeFile(join(repo, "file.txt"), "two\n");
+
+    const store = new CanvasStore();
+    await store.ensureInitialized();
+    const repositories = await store.listGitRepositories(repo);
+    expect(repositories[0]?.rootPath).toBe(repo);
+
+    const status = await store.getGitStatus(repo);
+    expect(status.clean).toBe(false);
+    expect(status.files[0]?.path).toBe("file.txt");
+
+    const diff = await store.getGitDiff(repo, "file.txt");
+    expect(diff.diff).toContain("-one");
+    expect(diff.diff).toContain("+two");
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("browser sessions persist pane navigation state", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const workspace = await store.getActiveWorkspace();
+  const now = new Date().toISOString();
+  const browserPane = {
+    id: "browser:test",
+    type: "browser" as const,
+    title: "Browser",
+    url: "about:blank",
+    history: ["about:blank"],
+    historyIndex: 0,
+    sessionId: "browser:test:session",
+    placement: "tiled" as const,
+    rect: { x: 0, y: 0, width: 800, height: 500 },
+    z: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await store.saveWorkspace({
+    ...workspace,
+    panes: [...workspace.panes, browserPane],
+    tiledLayout: {
+      type: "split",
+      id: "split:browser",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: workspace.tiledLayout ?? { type: "leaf", paneId: workspace.panes[0]!.id },
+      second: { type: "leaf", paneId: browserPane.id },
+    },
   });
 
-  expect(issues.map((issue) => issue.message)).toContain("missing command");
-  expect(issues.map((issue) => issue.message)).toContain("missing cwd");
+  const navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "data:text/html,<h1>Canvas</h1>",
+  });
+  expect(navigated.browser.url).toContain("data:text/html");
+  expect(navigated.browser.profilePath).toContain(encodeURIComponent(workspace.id));
 });
+
+async function run(command: string, args: string[], cwd: string) {
+  const proc = Bun.spawn([command, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  if (exitCode !== 0) throw new Error(`${command} ${args.join(" ")} failed: ${stdout}${stderr}`);
+}

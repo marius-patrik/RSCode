@@ -1,40 +1,64 @@
-import type { ActionGroup } from "@/ActionsMenu.tsx";
+import type { ActionGroup, ActionItem } from "@/ActionsMenu.tsx";
 import { CommandPopover, flattenGroups } from "@/CommandPopover.tsx";
-import type { CanvasSessionSummary } from "@/schema.ts";
+import type { WorkspaceSummary } from "@/schema.ts";
 import { cn } from "@/utils.ts";
-import { Hammer, Pencil, Plus, X } from "lucide-react";
-import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import {
+  Columns2,
+  Folder,
+  FolderGit2,
+  FolderKanban,
+  GitBranch,
+  Globe2,
+  Grid2X2,
+  Moon,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Sun,
+  Terminal,
+  X,
+} from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-export function Dock({
-  busy = false,
-  sessions,
-  activeSessionId,
-  onSwitchSession,
-  onCreateSession,
-  onRenameSession,
-  onCloseSession,
-  commandQuery,
-  onCommandQueryChange,
-  commandGroups,
-  onCommandSubmit,
-  onCommandFocus,
-  onCommandBlur,
-}: {
+type DockProps = {
   busy?: boolean;
-  sessions: CanvasSessionSummary[];
-  activeSessionId: string | null;
-  onSwitchSession: (id: string) => void;
-  onCreateSession: () => void;
-  onRenameSession: (id: string) => void;
-  onCloseSession: (id: string) => void;
+  workspaces: WorkspaceSummary[];
+  activeWorkspaceId: string | null;
+  activeView: "panes" | "canvas";
+  darkMode: boolean;
+  onSwitchWorkspace: (id: string) => void;
+  onCreateWorkspace: () => void;
+  onRenameWorkspace: (id: string) => void;
+  onCloseWorkspace: (id: string) => void;
+  onToggleView: () => void;
+  onToggleTheme: () => void;
   commandQuery: string;
   onCommandQueryChange: (next: string) => void;
   commandGroups: ActionGroup[];
   onCommandSubmit: (idx: number) => void;
   onCommandFocus?: () => void;
   onCommandBlur?: () => void;
-}) {
+};
+
+export function Dock({
+  busy = false,
+  workspaces,
+  activeWorkspaceId,
+  activeView,
+  darkMode,
+  onSwitchWorkspace,
+  onCreateWorkspace,
+  onRenameWorkspace,
+  onCloseWorkspace,
+  onToggleView,
+  onToggleTheme,
+  commandQuery,
+  onCommandQueryChange,
+  commandGroups,
+  onCommandSubmit,
+  onCommandFocus,
+  onCommandBlur,
+}: DockProps) {
   const [focused, setFocused] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -55,6 +79,15 @@ export function Dock({
 
   const popoverOpen = focused || commandQuery.trim().length > 0;
   const visibleCount = popoverOpen ? flattenGroups(commandQuery, commandGroups).length : 0;
+  const commandById = useMemo(() => indexCommands(commandGroups), [commandGroups]);
+  const quickActions = [
+    { id: "workspace.refresh", title: "Refresh workspace", icon: RefreshCw },
+    { id: "pane.open.explorer", title: "Explorer", icon: Folder },
+    { id: "pane.open.terminal", title: "Terminal", icon: Terminal },
+    { id: "pane.open.browser", title: "Browser", icon: Globe2 },
+    { id: "pane.open.repositories", title: "Repositories", icon: FolderGit2 },
+    { id: "pane.open.source-control", title: "Source Control", icon: GitBranch },
+  ] as const;
 
   function submitTop() {
     if (visibleCount === 0) return;
@@ -65,14 +98,15 @@ export function Dock({
     inputRef.current?.blur();
   }
 
+  function runAction(id: string) {
+    const action = commandById.get(id);
+    if (!action || action.disabledReason) return;
+    action.onSelect();
+  }
+
   return (
-    <motion.div
-      initial={{ y: 24, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.28, ease: "easeOut" }}
-      className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center"
-    >
-      <div className="pointer-events-auto relative flex w-[min(980px,calc(100vw-2rem))] flex-col">
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background text-foreground">
+      <div className="relative mx-auto flex h-12 max-w-screen-2xl items-center gap-2 px-2">
         {popoverOpen ? (
           <CommandPopover
             query={commandQuery}
@@ -88,108 +122,148 @@ export function Dock({
           />
         ) : null}
 
-        <div className="glass-heavy flex min-h-11 items-center gap-1 rounded-full border border-white/10 px-1 py-1 shadow-2xl backdrop-blur-xl">
-          <div className="flex min-w-0 max-w-[48%] items-center gap-1 overflow-x-auto pr-1">
-            {sessions.map((session) => {
-              const active = session.id === activeSessionId;
-              return (
-                <div
-                  key={session.id}
-                  className={cn(
-                    "group flex h-9 max-w-[180px] shrink-0 items-center gap-1 rounded-full border pl-2 pr-1",
-                    active
-                      ? "border-white/15 bg-white/[0.13] text-foreground"
-                      : "border-transparent bg-white/[0.05] text-muted-foreground hover:text-foreground",
-                  )}
+        <div className="flex min-w-0 max-w-[34vw] items-center gap-1 overflow-x-auto">
+          {workspaces.map((workspace) => {
+            const active = workspace.id === activeWorkspaceId;
+            return (
+              <div
+                key={workspace.id}
+                className={cn(
+                  "group flex h-8 max-w-[170px] shrink-0 items-center gap-1 rounded-md border px-1",
+                  active ? "border-ring bg-secondary text-foreground" : "border-transparent text-muted-foreground",
+                )}
+              >
+                <button
+                  type="button"
+                  title={`${workspace.label} - ${workspace.rootPath}`}
+                  onClick={() => onSwitchWorkspace(workspace.id)}
+                  className="flex min-w-0 items-center gap-1.5 px-1"
                 >
-                  <button
-                    type="button"
-                    title={`${session.label} - ${session.address}`}
-                    onClick={() => onSwitchSession(session.id)}
-                    className="flex min-w-0 items-center gap-1.5"
-                  >
-                    <Hammer className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate text-xs">{session.label}</span>
-                    {active && busy ? (
-                      <span
-                        aria-hidden
-                        className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-yellow-400 shadow-[0_0_8px_3px_rgba(250,204,21,0.55)]"
-                      />
-                    ) : null}
-                  </button>
-                  {active ? (
-                    <button
-                      type="button"
-                      title="Rename canvas"
-                      onClick={() => onRenameSession(session.id)}
-                      className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/[0.08] hover:text-foreground group-hover:inline-flex"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                  ) : null}
-                  {sessions.length > 1 ? (
-                    <button
-                      type="button"
-                      title="Close canvas"
-                      onClick={() => onCloseSession(session.id)}
-                      className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/[0.08] hover:text-foreground group-hover:inline-flex"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-            <button
-              type="button"
-              title="New canvas"
-              onClick={onCreateSession}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-muted-foreground transition-colors hover:bg-white/[0.12] hover:text-foreground"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-
-          <input
-            ref={inputRef}
-            value={commandQuery}
-            onChange={(e) => {
-              onCommandQueryChange(e.target.value);
-              setHighlight(0);
-            }}
-            onFocus={() => {
-              setFocused(true);
-              onCommandFocus?.();
-            }}
-            onBlur={() => {
-              setFocused(false);
-              onCommandBlur?.();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
-                if (visibleCount === 0) return;
-                e.preventDefault();
-                setHighlight((h) => (h + 1) % visibleCount);
-              } else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
-                if (visibleCount === 0) return;
-                e.preventDefault();
-                setHighlight((h) => (h - 1 + visibleCount) % visibleCount);
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                submitTop();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                onCommandQueryChange("");
-                setHighlight(0);
-                inputRef.current?.blur();
-              }
-            }}
-            placeholder="› run a command"
-            spellCheck={false}
-            className="min-w-0 flex-1 bg-transparent px-3 font-mono text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
-          />
+                  <FolderKanban className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate text-xs">{workspace.label}</span>
+                  {active && busy ? <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" /> : null}
+                </button>
+                {active ? (
+                  <DockIconButton title="Rename workspace" onClick={() => onRenameWorkspace(workspace.id)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </DockIconButton>
+                ) : null}
+                {workspaces.length > 1 ? (
+                  <DockIconButton title="Close workspace" onClick={() => onCloseWorkspace(workspace.id)}>
+                    <X className="h-3.5 w-3.5" />
+                  </DockIconButton>
+                ) : null}
+              </div>
+            );
+          })}
+          <DockIconButton title="New workspace" onClick={onCreateWorkspace} prominent>
+            <Plus className="h-4 w-4" />
+          </DockIconButton>
         </div>
+
+        <div className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
+          <DockIconButton title={activeView === "panes" ? "Switch to canvas" : "Switch to panes"} onClick={onToggleView} active>
+            {activeView === "panes" ? <Grid2X2 className="h-4 w-4" /> : <Columns2 className="h-4 w-4" />}
+          </DockIconButton>
+          {quickActions.map((action) => {
+            const item = commandById.get(action.id);
+            const Icon = action.icon;
+            return (
+              <DockIconButton
+                key={action.id}
+                title={item?.disabledReason ?? action.title}
+                onClick={() => runAction(action.id)}
+                disabled={!item || Boolean(item.disabledReason)}
+              >
+                <Icon className="h-4 w-4" />
+              </DockIconButton>
+            );
+          })}
+          <DockIconButton title={darkMode ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleTheme}>
+            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </DockIconButton>
+        </div>
+
+        <input
+          ref={inputRef}
+          value={commandQuery}
+          onChange={(e) => {
+            onCommandQueryChange(e.target.value);
+            setHighlight(0);
+          }}
+          onFocus={() => {
+            setFocused(true);
+            onCommandFocus?.();
+          }}
+          onBlur={() => {
+            setFocused(false);
+            onCommandBlur?.();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
+              if (visibleCount === 0) return;
+              e.preventDefault();
+              setHighlight((h) => (h + 1) % visibleCount);
+            } else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
+              if (visibleCount === 0) return;
+              e.preventDefault();
+              setHighlight((h) => (h - 1 + visibleCount) % visibleCount);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              submitTop();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCommandQueryChange("");
+              setHighlight(0);
+              inputRef.current?.blur();
+            }
+          }}
+          placeholder="Run a command"
+          spellCheck={false}
+          className="min-w-[180px] flex-1 rounded-md border border-border bg-secondary px-3 py-1.5 font-mono text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
       </div>
-    </motion.div>
+    </div>
   );
+}
+
+function DockIconButton({
+  title,
+  onClick,
+  children,
+  active,
+  disabled,
+  prominent,
+}: {
+  title: string;
+  onClick: () => void;
+  children: ReactNode;
+  active?: boolean;
+  disabled?: boolean;
+  prominent?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-35",
+        "hover:border-border hover:bg-secondary hover:text-foreground",
+        active && "border-ring bg-secondary text-foreground",
+        prominent && "border-border bg-secondary text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function indexCommands(groups: ActionGroup[]): Map<string, ActionItem> {
+  const out = new Map<string, ActionItem>();
+  for (const group of groups) {
+    for (const item of group.items) out.set(item.id, item);
+  }
+  return out;
 }

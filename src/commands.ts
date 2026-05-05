@@ -1,6 +1,13 @@
 import type { ActionGroup, ActionItem } from "@/ActionsMenu.tsx";
 
-export type CommandScope = "global" | "filesystem" | "panel" | "graph" | "navigation";
+export type CommandScope =
+  | "global"
+  | "workspace"
+  | "filesystem"
+  | "panel"
+  | "browser"
+  | "git"
+  | "navigation";
 
 export type CommandAvailability =
   | { enabled: true }
@@ -22,9 +29,8 @@ export type CommandDefinition = {
 };
 
 export type CommandContext = {
-  address: string;
+  rootPath: string;
   selectedPath: string | null;
-  selectedGraphNodeId: string | null;
   activePanelId: string | null;
 };
 
@@ -66,11 +72,12 @@ export function commandGroupsFor(commands: CommandDefinition[]): ActionGroup[] {
 }
 
 function labelForGroup(group: string): string {
-  if (group === "session") return "Session";
+  if (group === "workspace") return "Workspace";
   if (group === "new") return "New";
   if (group === "item") return "Item";
   if (group === "panel") return "Panel";
-  if (group === "graph") return "Executable Graph";
+  if (group === "browser") return "Browser";
+  if (group === "git") return "Source Control";
   if (group === "navigation") return "Navigation";
   return group;
 }
