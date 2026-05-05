@@ -32,7 +32,9 @@ type DockProps = {
   commandQuery: string;
   onCommandQueryChange: (next: string) => void;
   commandGroups: ActionGroup[];
-  onCommandSubmit: (idx: number) => void;
+  onCommandSubmit: (idx: number, filter?: string) => void;
+  onFileSearchSubmit: (query: string) => void;
+  onWebSubmit: (query: string) => void;
   onCommandFocus?: () => void;
   onCommandBlur?: () => void;
 };
@@ -51,6 +53,8 @@ export function Dock({
   onCommandQueryChange,
   commandGroups,
   onCommandSubmit,
+  onFileSearchSubmit,
+  onWebSubmit,
   onCommandFocus,
   onCommandBlur,
 }: DockProps) {
@@ -72,8 +76,12 @@ export function Dock({
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  const popoverOpen = focused || commandQuery.trim().length > 0;
-  const visibleCount = popoverOpen ? flattenGroups(commandQuery, commandGroups).length : 0;
+  const trimmedQuery = commandQuery.trim();
+  const prefixedQuery = commandQuery.trimStart();
+  const launcherMode = prefixedQuery.startsWith(">") ? "commands" : prefixedQuery.startsWith("/") ? "files" : "web";
+  const commandFilter = launcherMode === "commands" ? prefixedQuery.slice(1).trimStart() : "";
+  const popoverOpen = focused && launcherMode === "commands";
+  const visibleCount = popoverOpen ? flattenGroups(commandFilter, commandGroups).length : 0;
   const commandById = useMemo(() => indexCommands(commandGroups), [commandGroups]);
   const quickActions = [
     { id: "workspace.refresh", title: "Refresh workspace", icon: RefreshCw },
@@ -86,9 +94,24 @@ export function Dock({
   ] as const;
 
   function submitTop() {
+    if (!trimmedQuery) return;
+    if (launcherMode === "files") {
+      onFileSearchSubmit(prefixedQuery.slice(1).trimStart());
+      clearInput();
+      return;
+    }
+    if (launcherMode === "web") {
+      onWebSubmit(trimmedQuery);
+      clearInput();
+      return;
+    }
     if (visibleCount === 0) return;
     const idx = highlight < visibleCount ? highlight : 0;
-    onCommandSubmit(idx);
+    onCommandSubmit(idx, commandFilter);
+    clearInput();
+  }
+
+  function clearInput() {
     onCommandQueryChange("");
     setHighlight(0);
     inputRef.current?.blur();
@@ -105,15 +128,13 @@ export function Dock({
       <div className="relative mx-auto flex h-12 max-w-screen-2xl items-center gap-2 px-2">
         {popoverOpen ? (
           <CommandPopover
-            query={commandQuery}
+            query={commandFilter}
             groups={commandGroups}
             highlight={highlight}
             onHighlightChange={setHighlight}
             onPick={(idx) => {
-              onCommandSubmit(idx);
-              onCommandQueryChange("");
-              setHighlight(0);
-              inputRef.current?.blur();
+              onCommandSubmit(idx, commandFilter);
+              clearInput();
             }}
           />
         ) : null}
@@ -194,10 +215,12 @@ export function Dock({
           }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
+              if (launcherMode !== "commands") return;
               if (visibleCount === 0) return;
               e.preventDefault();
               setHighlight((h) => (h + 1) % visibleCount);
             } else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
+              if (launcherMode !== "commands") return;
               if (visibleCount === 0) return;
               e.preventDefault();
               setHighlight((h) => (h - 1 + visibleCount) % visibleCount);
@@ -211,7 +234,7 @@ export function Dock({
               inputRef.current?.blur();
             }
           }}
-          placeholder="Run a command"
+          placeholder="Type message or URL to search web, / files, > commands"
           spellCheck={false}
           className="min-w-[180px] flex-1 rounded-md border border-border bg-secondary px-3 py-1.5 font-mono text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />

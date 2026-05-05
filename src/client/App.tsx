@@ -26,6 +26,9 @@ type AppModal =
       onConfirm: () => void;
     };
 
+type LauncherFileSearch = { id: number; query: string };
+type LauncherBrowserRequest = { id: number; url: string };
+
 export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMountProps) {
   const client = useMemo(() => makeClient(baseUrl), [baseUrl]);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
@@ -36,6 +39,8 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   const [gitStatuses, setGitStatuses] = useState<Map<string, GitStatus>>(() => new Map());
   const [commandGroups, setCommandGroups] = useState<ActionGroup[]>([]);
   const [commandQuery, setCommandQuery] = useState("");
+  const [launcherFileSearch, setLauncherFileSearch] = useState<LauncherFileSearch | null>(null);
+  const [launcherBrowserRequest, setLauncherBrowserRequest] = useState<LauncherBrowserRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<AppModal | null>(null);
@@ -312,8 +317,8 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   );
 
   const onCommandSubmit = useCallback(
-    (idx: number) => {
-      const filterText = commandQuery.trim().toLowerCase();
+    (idx: number, filter = commandQuery) => {
+      const filterText = filter.trim().toLowerCase();
       const flat: Array<{ run: () => void; disabled: boolean }> = [];
       for (const group of commandGroups) {
         for (const item of group.items) {
@@ -327,6 +332,16 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     },
     [commandGroups, commandQuery],
   );
+
+  const onFileSearchSubmit = useCallback((query: string) => {
+    setLauncherFileSearch((current) => ({ id: (current?.id ?? 0) + 1, query }));
+  }, []);
+
+  const onWebSubmit = useCallback((query: string) => {
+    const url = urlForLauncherQuery(query);
+    if (!url) return;
+    setLauncherBrowserRequest((current) => ({ id: (current?.id ?? 0) + 1, url }));
+  }, []);
 
   const toggleActiveView = useCallback(() => {
     if (!activeWorkspace) return;
@@ -358,6 +373,10 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
               onRequestGitStatus={onRequestGitStatus}
               onRequestGitDiff={onRequestGitDiff}
               onBrowserNavigate={onBrowserNavigate}
+              launcherFileSearch={launcherFileSearch}
+              onLauncherFileSearchHandled={() => setLauncherFileSearch(null)}
+              launcherBrowserRequest={launcherBrowserRequest}
+              onLauncherBrowserRequestHandled={() => setLauncherBrowserRequest(null)}
             />
           ) : (
             <div className="flex h-full items-center justify-center bg-background font-mono text-sm text-muted-foreground">
@@ -383,11 +402,22 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         onCommandQueryChange={setCommandQuery}
         commandGroups={commandGroups}
         onCommandSubmit={onCommandSubmit}
+        onFileSearchSubmit={onFileSearchSubmit}
+        onWebSubmit={onWebSubmit}
       />
 
       {modal ? <AppModalView modal={modal} onClose={() => setModal(null)} /> : null}
     </div>
   );
+}
+
+export function urlForLauncherQuery(query: string): string | null {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  if (/^(about|data|file|https?):/i.test(trimmed)) return trimmed;
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/.*)?$/i.test(trimmed)) return `http://${trimmed}`;
+  if (/^[^\s/]+\.[^\s]+(?:\/.*)?$/i.test(trimmed)) return `https://${trimmed}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
 }
 
 export default function App() {

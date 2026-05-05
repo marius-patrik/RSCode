@@ -73,6 +73,10 @@ type CanvasProps = {
   onRequestGitStatus: (repoPath: string) => Promise<GitStatus>;
   onRequestGitDiff: (repoPath: string, path: string) => Promise<GitDiff>;
   onBrowserNavigate: (workspaceId: string, paneId: string, url: string) => Promise<void>;
+  launcherFileSearch: { id: number; query: string } | null;
+  onLauncherFileSearchHandled: () => void;
+  launcherBrowserRequest: { id: number; url: string } | null;
+  onLauncherBrowserRequestHandled: () => void;
 };
 
 type ModalRequest =
@@ -113,6 +117,10 @@ export function Canvas({
   onRequestGitStatus,
   onRequestGitDiff,
   onBrowserNavigate,
+  launcherFileSearch,
+  onLauncherFileSearchHandled,
+  launcherBrowserRequest,
+  onLauncherBrowserRequestHandled,
 }: CanvasProps) {
   const workspace = useMemo<Workspace>(
     () => ({
@@ -225,6 +233,19 @@ export function Canvas({
     },
     [addPane, workspace.panes],
   );
+
+  useEffect(() => {
+    if (!launcherBrowserRequest) return;
+    openBrowserPane(launcherBrowserRequest.url);
+    onLauncherBrowserRequestHandled();
+  }, [launcherBrowserRequest, onLauncherBrowserRequestHandled, openBrowserPane]);
+
+  useEffect(() => {
+    if (!launcherFileSearch) return;
+    setFinderQuery(launcherFileSearch.query);
+    setFinderOpen(true);
+    onLauncherFileSearchHandled();
+  }, [launcherFileSearch, onLauncherFileSearchHandled]);
 
   const openSourceControlPane = useCallback(
     (repoPath: string | null = repositories[0]?.rootPath ?? null, placement: PaneState["placement"] = "tiled") => {

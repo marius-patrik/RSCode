@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { urlForLauncherQuery } from "@/client/App";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled, runCommand } from "@/client/commands";
 
 test("command registry surfaces disabled reasons and prevents disabled execution", () => {
@@ -33,4 +34,12 @@ test("command registry surfaces disabled reasons and prevents disabled execution
   runCommand(commands[0] as CommandDefinition);
   expect(ran).toBe(true);
   expect(() => runCommand(commands[1] as CommandDefinition)).toThrow("missing context");
+});
+
+test("launcher input resolves URLs and web searches", () => {
+  expect(urlForLauncherQuery("https://example.com/path")).toBe("https://example.com/path");
+  expect(urlForLauncherQuery("localhost:4567")).toBe("http://localhost:4567");
+  expect(urlForLauncherQuery("example.com/docs")).toBe("https://example.com/docs");
+  expect(urlForLauncherQuery("pane workspace")).toBe("https://www.google.com/search?q=pane%20workspace");
+  expect(urlForLauncherQuery("   ")).toBeNull();
 });
