@@ -27,21 +27,21 @@
 
 :root {
   --radius: 0.5rem;
-  --background: #f7f7f5;
+  --background: #ffffff;
   --foreground: #050505;
-  --muted: #e8e8e4;
-  --muted-foreground: #5f5f5c;
+  --muted: #f2f2f2;
+  --muted-foreground: #646464;
   --primary: #050505;
   --primary-foreground: #ffffff;
-  --secondary: #eeeeea;
+  --secondary: #f7f7f7;
   --secondary-foreground: #050505;
-  --border: rgba(0, 0, 0, 0.14);
-  --ring: rgba(0, 0, 0, 0.48);
-  --surface-1: rgba(0, 0, 0, 0.035);
-  --surface-2: rgba(0, 0, 0, 0.065);
-  --surface-hover: rgba(0, 0, 0, 0.1);
-  --input-bg: rgba(0, 0, 0, 0.04);
-  --grid-line: rgba(0, 0, 0, 0.06);
+  --border: rgba(0, 0, 0, 0.1);
+  --ring: rgba(0, 0, 0, 0.42);
+  --surface-1: rgba(0, 0, 0, 0.025);
+  --surface-2: rgba(0, 0, 0, 0.055);
+  --surface-hover: rgba(0, 0, 0, 0.075);
+  --input-bg: rgba(0, 0, 0, 0.025);
+  --grid-line: rgba(0, 0, 0, 0.045);
 }
 
 .dark {

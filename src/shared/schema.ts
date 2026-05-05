@@ -36,6 +36,7 @@ export const paneTypeSchema = z.enum([
   "browser",
   "sourceControl",
   "repositories",
+  "settings",
 ]);
 
 export const panePlacementSchema = z.enum(["tiled", "floating", "canvas"]);
@@ -87,6 +88,10 @@ export const repositoriesPaneStateSchema = paneBaseSchema.extend({
   rootPath: z.string().trim().min(1),
 });
 
+export const settingsPaneStateSchema = paneBaseSchema.extend({
+  type: z.literal("settings"),
+});
+
 export const paneStateSchema = z.discriminatedUnion("type", [
   explorerPaneStateSchema,
   editorPaneStateSchema,
@@ -94,12 +99,15 @@ export const paneStateSchema = z.discriminatedUnion("type", [
   browserPaneStateSchema,
   sourceControlPaneStateSchema,
   repositoriesPaneStateSchema,
+  settingsPaneStateSchema,
 ]);
 
 export type TiledLayoutNode =
   | {
       type: "leaf";
       paneId: string;
+      paneIds?: string[];
+      activePaneId?: string | null;
     }
   | {
       type: "split";
@@ -115,6 +123,8 @@ export const tiledLayoutNodeSchema: z.ZodType<TiledLayoutNode> = z.lazy(() =>
     z.object({
       type: z.literal("leaf"),
       paneId: z.string().trim().min(1),
+      paneIds: z.array(z.string().trim().min(1)).default([]),
+      activePaneId: z.string().trim().min(1).nullable().default(null),
     }),
     z.object({
       type: z.literal("split"),
@@ -127,11 +137,18 @@ export const tiledLayoutNodeSchema: z.ZodType<TiledLayoutNode> = z.lazy(() =>
   ]),
 );
 
+export const workspaceSettingsSchema = z.object({
+  theme: z.enum(["dark", "light"]).default("dark"),
+  defaultView: z.enum(["panes", "canvas"]).default("panes"),
+  tabbedPanes: z.boolean().default(true),
+});
+
 export const workspaceSchema = z.object({
   id: z.string().trim().min(1),
   label: z.string().trim().min(1),
   rootPath: z.string().trim().min(1),
   activeView: z.enum(["panes", "canvas"]).default("panes"),
+  settings: workspaceSettingsSchema.default({ theme: "dark", defaultView: "panes", tabbedPanes: true }),
   panes: z.array(paneStateSchema).default([]),
   tiledLayout: tiledLayoutNodeSchema.nullable().default(null),
   canvasViewport: viewportStateSchema,
@@ -217,7 +234,9 @@ export type TerminalPaneState = z.infer<typeof terminalPaneStateSchema>;
 export type BrowserPaneState = z.infer<typeof browserPaneStateSchema>;
 export type SourceControlPaneState = z.infer<typeof sourceControlPaneStateSchema>;
 export type RepositoriesPaneState = z.infer<typeof repositoriesPaneStateSchema>;
+export type SettingsPaneState = z.infer<typeof settingsPaneStateSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
+export type WorkspaceSettings = z.infer<typeof workspaceSettingsSchema>;
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 export type WorkspaceIndex = z.infer<typeof workspaceIndexSchema>;
 export type GitRepository = z.infer<typeof gitRepositorySchema>;

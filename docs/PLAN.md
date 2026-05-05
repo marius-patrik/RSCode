@@ -3,8 +3,8 @@
 ## Current Implementation State
 
 Canvas is implemented as a Bun/React local app with source under `src/`.
-It currently owns its local server, store, session persistence, filesystem API,
-terminal websocket, and graph execution.
+It currently owns its local server, store, workspace persistence, filesystem
+API, terminal websocket, readonly git API, and backend browser panes.
 
 ## Decisions Locked
 
@@ -15,20 +15,20 @@ terminal websocket, and graph execution.
 
 ## Next Milestone
 
-Preserve current behavior, then expose a `CanvasMount` component for Workspace.
+Polish the workspace pane shell and keep `CanvasMount` stable for Workspace.
 
 ## Implementation Phases
 
 1. Preserve and verify current Canvas WIP.
-2. Add package export for `CanvasMount`.
+2. Keep `CanvasMount` export stable.
 3. Separate UI state from local server/store calls.
-4. Add Mainframe-backed client integration for sessions, filesystem, graph, and
-   terminal metadata.
+4. Add Mainframe-backed client integration for workspaces, filesystem, panes,
+   browser sessions, git metadata, and terminal metadata.
 5. Keep standalone dev mode as a thin client where useful.
 
 ## Verification Checklist
 
 - `bun run verify`
-- Existing session, panel, and graph tests pass.
+- Existing workspace, pane, browser, git, and terminal tests pass.
 - `CanvasMount` renders inside Workspace.
-- Mainframe-backed session persistence matches current behavior.
+- Mainframe-backed workspace persistence matches current behavior.

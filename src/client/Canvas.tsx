@@ -13,9 +13,11 @@ import type {
   PaneRect,
   PaneState,
   PaneType,
+  SettingsPaneState,
   SourceControlPaneState,
   TiledLayoutNode,
   Workspace,
+  WorkspaceSettings,
 } from "@/shared/schema";
 import { cn } from "@/shared/utils";
 import {
@@ -32,9 +34,12 @@ import {
   Grid2X2,
   Maximize2,
   PanelLeft,
+  Plus,
   RefreshCw,
+  Rows2,
   Save,
   Search,
+  Settings,
   Terminal as TerminalIcon,
   X,
 } from "lucide-react";
@@ -148,10 +153,11 @@ export function Canvas({
       const topZ = maxPaneZ(workspace.panes) + 1;
       updateWorkspace({
         activePaneId: paneId,
+        tiledLayout: activateLayoutTab(workspace.tiledLayout, paneId),
         panes: workspace.panes.map((pane) => (pane.id === paneId ? { ...pane, z: topZ, updatedAt: nowIso() } : pane)),
       });
     },
-    [updateWorkspace, workspace.panes],
+    [updateWorkspace, workspace.panes, workspace.tiledLayout],
   );
 
   const addPane = useCallback(
@@ -226,16 +232,57 @@ export function Canvas({
     [addPane, workspace.panes, workspace.rootPath],
   );
 
+  const openSettingsPane = useCallback(
+    (placement: PaneState["placement"] = "tiled") => {
+      const existing = workspace.panes.find((pane) => pane.type === "settings");
+      if (existing) {
+        focusPane(existing.id);
+        return;
+      }
+      addPane(makeSettingsPane(workspace.panes, placement));
+    },
+    [addPane, focusPane, workspace.panes],
+  );
+
   const closePane = useCallback(
     (paneId: string) => {
       const nextPanes = workspace.panes.filter((pane) => pane.id !== paneId);
+      const tiledLayout = removePaneFromLayout(workspace.tiledLayout, paneId);
       updateWorkspace({
         panes: nextPanes,
-        tiledLayout: removePaneFromLayout(workspace.tiledLayout, paneId),
-        activePaneId: workspace.activePaneId === paneId ? (nextPanes.at(-1)?.id ?? null) : workspace.activePaneId,
+        tiledLayout,
+        activePaneId:
+          workspace.activePaneId === paneId
+            ? (firstPaneIdInLayout(tiledLayout) ?? nextPanes.at(-1)?.id ?? null)
+            : workspace.activePaneId,
       });
     },
     [updateWorkspace, workspace.activePaneId, workspace.panes, workspace.tiledLayout],
+  );
+
+  const addPaneTab = useCallback(
+    (paneId: string) => {
+      const pane = workspace.panes.find((candidate) => candidate.id === paneId);
+      if (!pane) return;
+      const clone = clonePaneForSplit(pane, workspace.panes);
+      updateWorkspace({
+        panes: [...workspace.panes, clone],
+        tiledLayout: addPaneToLayoutTab(workspace.tiledLayout, paneId, clone.id),
+        activePaneId: clone.id,
+      });
+    },
+    [updateWorkspace, workspace.panes, workspace.tiledLayout],
+  );
+
+  const updateSettings = useCallback(
+    (patch: Partial<WorkspaceSettings>) => {
+      const settings = { ...workspace.settings, ...patch };
+      updateWorkspace({
+        settings,
+        activeView: patch.defaultView ?? workspace.activeView,
+      });
+    },
+    [updateWorkspace, workspace.activeView, workspace.settings],
   );
 
   const splitPane = useCallback(
@@ -327,8 +374,10 @@ export function Canvas({
         openBrowserPane,
         openSourceControlPane,
         openRepositoriesPane,
+        openSettingsPane,
         closePane,
         splitPane,
+        addPaneTab,
         setPanePlacement,
         saveEditorPane,
         setView: (activeView) => updateWorkspace({ activeView }),
@@ -393,12 +442,14 @@ export function Canvas({
       openEditorPane,
       openExplorerPane,
       openRepositoriesPane,
+      openSettingsPane,
       openSourceControlPane,
       openTerminalPane,
       repositories,
       saveEditorPane,
       selectedEntry,
       selectedPath,
+      addPaneTab,
       setPanePlacement,
       splitPane,
       updateWorkspace,
@@ -477,7 +528,9 @@ export function Canvas({
             onUpdatePane={updatePane}
             onClosePane={closePane}
             onSplitPane={splitPane}
+            onAddPaneTab={addPaneTab}
             onSetPanePlacement={setPanePlacement}
+            onUpdateSettings={updateSettings}
             onUpdateSplitRatio={updateSplitRatio}
             onOpenEditor={openEditorPane}
             onOpenTerminal={openTerminalPane}
@@ -503,7 +556,9 @@ export function Canvas({
             onUpdatePane={updatePane}
             onClosePane={closePane}
             onSplitPane={splitPane}
+            onAddPaneTab={addPaneTab}
             onSetPanePlacement={setPanePlacement}
+            onUpdateSettings={updateSettings}
             onOpenEditor={openEditorPane}
             onOpenTerminal={openTerminalPane}
             onSaveEditor={saveEditorPane}
@@ -529,7 +584,9 @@ export function Canvas({
           onUpdatePane={updatePane}
           onClosePane={closePane}
           onSplitPane={splitPane}
+          onAddPaneTab={addPaneTab}
           onSetPanePlacement={setPanePlacement}
+          onUpdateSettings={updateSettings}
           onOpenEditor={openEditorPane}
           onOpenTerminal={openTerminalPane}
           onSaveEditor={saveEditorPane}
@@ -612,7 +669,13 @@ type TiledWorkspaceProps = PaneRenderProps & {
 function TiledNode({ layout, panes, onUpdateSplitRatio, ...props }: TiledWorkspaceProps & { layout: TiledLayoutNode }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   if (layout.type === "leaf") {
-    const pane = panes.find((candidate) => candidate.id === layout.paneId);
+    const tabPanes = leafPaneIds(layout)
+      .map((paneId) => panes.find((candidate) => candidate.id === paneId))
+      .filter((pane): pane is PaneState => Boolean(pane));
+    const activeTabId = layout.activePaneId && tabPanes.some((pane) => pane.id === layout.activePaneId)
+      ? layout.activePaneId
+      : layout.paneId;
+    const pane = tabPanes.find((candidate) => candidate.id === activeTabId) ?? tabPanes[0];
     if (!pane) return null;
     return (
       <PaneFrame
@@ -620,6 +683,7 @@ function TiledNode({ layout, panes, onUpdateSplitRatio, ...props }: TiledWorkspa
         pane={pane}
         active={pane.id === props.activePaneId}
         mode="tiled"
+        tabs={tabPanes}
       />
     );
   }
@@ -673,7 +737,9 @@ type PaneRenderProps = {
   onUpdatePane: (paneId: string, updater: (pane: PaneState) => PaneState) => void;
   onClosePane: (paneId: string) => void;
   onSplitPane: (paneId: string, direction?: "horizontal" | "vertical") => void;
+  onAddPaneTab: (paneId: string) => void;
   onSetPanePlacement: (paneId: string, placement: PaneState["placement"]) => void;
+  onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
   onOpenEditor: (path: string, placement?: PaneState["placement"]) => Promise<void>;
   onOpenTerminal: (cwd?: string, placement?: PaneState["placement"]) => void;
   onSaveEditor: (pane: EditorPaneState) => Promise<void>;
@@ -815,6 +881,7 @@ function PaneFrame({
   pane,
   active,
   mode,
+  tabs,
   workspace,
   fileTrees,
   repositories,
@@ -826,7 +893,9 @@ function PaneFrame({
   onUpdatePane,
   onClosePane,
   onSplitPane,
+  onAddPaneTab,
   onSetPanePlacement,
+  onUpdateSettings,
   onOpenEditor,
   onOpenTerminal,
   onSaveEditor,
@@ -840,10 +909,12 @@ function PaneFrame({
   pane: PaneState;
   active: boolean;
   mode: "tiled" | "floating" | "canvas";
+  tabs?: PaneState[];
   dragHandleProps?: {
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   };
 }) {
+  const showTabs = mode === "tiled" && tabs && tabs.length > 1;
   return (
     <section
       className={cn(
@@ -873,6 +944,14 @@ function PaneFrame({
         <HeaderButton title="Split right" onClick={() => onSplitPane(pane.id, "horizontal")}>
           <PanelLeft className="h-3.5 w-3.5" />
         </HeaderButton>
+        <HeaderButton title="Split down" onClick={() => onSplitPane(pane.id, "vertical")}>
+          <Rows2 className="h-3.5 w-3.5" />
+        </HeaderButton>
+        {workspace.settings.tabbedPanes && mode === "tiled" ? (
+          <HeaderButton title="New tab" onClick={() => onAddPaneTab(pane.id)}>
+            <Plus className="h-3.5 w-3.5" />
+          </HeaderButton>
+        ) : null}
         <HeaderButton
           title={mode === "tiled" ? "Float" : "Tile"}
           onClick={() => onSetPanePlacement(pane.id, mode === "tiled" ? "floating" : "tiled")}
@@ -886,6 +965,41 @@ function PaneFrame({
           <X className="h-3.5 w-3.5" />
         </HeaderButton>
       </header>
+      {showTabs ? (
+        <div className="flex h-8 shrink-0 items-end gap-1 overflow-x-auto border-b border-border bg-background px-1 pt-1">
+          {tabs.map((tab) => {
+            const selected = tab.id === pane.id;
+            return (
+              <div
+                key={tab.id}
+                title={tab.title}
+                className={cn(
+                  "flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs",
+                  selected ? "border-border bg-secondary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => onFocusPane(tab.id)}
+                  className="flex min-w-0 flex-1 items-center gap-1.5"
+                >
+                  {paneIcon(tab.type, "h-3.5 w-3.5 shrink-0")}
+                  <span className="truncate">{tab.title}</span>
+                  {tab.type === "editor" && tab.dirty ? <span className="shrink-0">*</span> : null}
+                </button>
+                <button
+                  type="button"
+                  title="Close tab"
+                  className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-[var(--surface-hover)]"
+                  onClick={() => onClosePane(tab.id)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-hidden">
         {pane.type === "explorer" ? (
           <ExplorerPane
@@ -922,6 +1036,9 @@ function PaneFrame({
             onRequestRepositories={onRequestRepositories}
             onOpenSourceControl={onOpenSourceControl}
           />
+        ) : null}
+        {pane.type === "settings" ? (
+          <SettingsPane workspace={workspace} pane={pane} onUpdateSettings={onUpdateSettings} />
         ) : null}
       </div>
     </section>
@@ -1409,6 +1526,121 @@ function RepositoriesPane({
   );
 }
 
+function SettingsPane({
+  workspace,
+  pane,
+  onUpdateSettings,
+}: {
+  workspace: Workspace;
+  pane: SettingsPaneState;
+  onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
+}) {
+  const settings = workspace.settings;
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+        <Settings className="h-4 w-4" />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{pane.title}</span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className="mx-auto grid max-w-2xl gap-4">
+          <SettingRow
+            title="Theme"
+            detail="Controls the app chrome and pane surfaces."
+            control={
+              <SegmentedControl
+                value={settings.theme}
+                options={[
+                  { value: "dark", label: "Dark" },
+                  { value: "light", label: "Light" },
+                ]}
+                onChange={(value) => onUpdateSettings({ theme: value as WorkspaceSettings["theme"] })}
+              />
+            }
+          />
+          <SettingRow
+            title="Default View"
+            detail="Choose the workspace view to return to by default."
+            control={
+              <SegmentedControl
+                value={settings.defaultView}
+                options={[
+                  { value: "panes", label: "Panes" },
+                  { value: "canvas", label: "Canvas" },
+                ]}
+                onChange={(value) => onUpdateSettings({ defaultView: value as WorkspaceSettings["defaultView"] })}
+              />
+            }
+          />
+          <SettingRow
+            title="Tabbed Panes"
+            detail="Allow tiled panes to hold multiple tabs."
+            control={
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.tabbedPanes}
+                onClick={() => onUpdateSettings({ tabbedPanes: !settings.tabbedPanes })}
+                className={cn(
+                  "relative h-6 w-11 rounded-full border border-border transition-colors",
+                  settings.tabbedPanes ? "bg-primary" : "bg-secondary",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-background transition-transform",
+                    settings.tabbedPanes ? "translate-x-5" : "translate-x-0.5",
+                  )}
+                />
+              </button>
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingRow({ title, detail, control }: { title: string; detail: string; control: ReactNode }) {
+  return (
+    <section className="grid gap-3 rounded-md border border-border bg-secondary p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold">{title}</div>
+        <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{detail}</div>
+      </div>
+      <div className="shrink-0">{control}</div>
+    </section>
+  );
+}
+
+function SegmentedControl({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "h-7 rounded px-3 text-xs transition-colors",
+            option.value === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Finder({
   query,
   results,
@@ -1564,8 +1796,10 @@ function createWorkspaceCommands(args: {
   openBrowserPane: (url?: string, placement?: PaneState["placement"]) => void;
   openSourceControlPane: (repoPath?: string | null, placement?: PaneState["placement"]) => void;
   openRepositoriesPane: (placement?: PaneState["placement"]) => void;
+  openSettingsPane: (placement?: PaneState["placement"]) => void;
   closePane: (paneId: string) => void;
   splitPane: (paneId: string, direction?: "horizontal" | "vertical") => void;
+  addPaneTab: (paneId: string) => void;
   setPanePlacement: (paneId: string, placement: PaneState["placement"]) => void;
   saveEditorPane: (pane: EditorPaneState) => Promise<void>;
   setView: (view: Workspace["activeView"]) => void;
@@ -1618,16 +1852,16 @@ function createWorkspaceCommands(args: {
     {
       id: "pane.open.explorer",
       label: "Open Explorer",
-      scope: "panel",
-      group: "panel",
+      scope: "pane",
+      group: "pane",
       enabled,
       run: args.openExplorerPane,
     },
     {
       id: "pane.open.terminal",
       label: "Open Terminal",
-      scope: "panel",
-      group: "panel",
+      scope: "pane",
+      group: "pane",
       hint: contextFolder,
       enabled,
       run: () => args.openTerminalPane(contextFolder),
@@ -1656,6 +1890,14 @@ function createWorkspaceCommands(args: {
       hint: args.repositories[0]?.relativePath,
       enabled,
       run: () => args.openSourceControlPane(args.repositories[0]?.rootPath ?? null),
+    },
+    {
+      id: "pane.open.settings",
+      label: "Open Settings",
+      scope: "workspace",
+      group: "workspace",
+      enabled,
+      run: () => args.openSettingsPane(),
     },
     {
       id: "fs.open-file",
@@ -1699,10 +1941,10 @@ function createWorkspaceCommands(args: {
       run: () => args.createFile(contextFolder, kind),
     })),
     {
-      id: "panel.save-active",
+      id: "pane.save-active",
       label: "Save Active Editor",
-      scope: "panel",
-      group: "panel",
+      scope: "pane",
+      group: "pane",
       hint: activeEditor?.filePath,
       enabled: () => (activeEditor ? enabled() : disabled("focus an editor")),
       run: () => {
@@ -1710,10 +1952,10 @@ function createWorkspaceCommands(args: {
       },
     },
     {
-      id: "panel.split-active",
-      label: "Split Active Pane",
-      scope: "panel",
-      group: "panel",
+      id: "pane.split-active",
+      label: "Split Active Pane Right",
+      scope: "pane",
+      group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
       run: () => {
@@ -1721,10 +1963,32 @@ function createWorkspaceCommands(args: {
       },
     },
     {
-      id: "panel.float-active",
+      id: "pane.split-active-vertical",
+      label: "Split Active Pane Down",
+      scope: "pane",
+      group: "pane",
+      hint: args.activePane?.title,
+      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
+      run: () => {
+        if (args.activePane) args.splitPane(args.activePane.id, "vertical");
+      },
+    },
+    {
+      id: "pane.tab-active",
+      label: "New Tab in Active Pane",
+      scope: "pane",
+      group: "pane",
+      hint: args.activePane?.title,
+      enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
+      run: () => {
+        if (args.activePane) args.addPaneTab(args.activePane.id);
+      },
+    },
+    {
+      id: "pane.float-active",
       label: "Float Active Pane",
-      scope: "panel",
-      group: "panel",
+      scope: "pane",
+      group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
       run: () => {
@@ -1732,10 +1996,10 @@ function createWorkspaceCommands(args: {
       },
     },
     {
-      id: "panel.close-active",
+      id: "pane.close-active",
       label: "Close Active Pane",
-      scope: "panel",
-      group: "panel",
+      scope: "pane",
+      group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
       run: () => {
@@ -1809,6 +2073,7 @@ function paneIcon(type: PaneType, className: string) {
   if (type === "terminal") return <TerminalIcon className={className} />;
   if (type === "browser") return <Globe2 className={className} />;
   if (type === "sourceControl") return <GitBranch className={className} />;
+  if (type === "settings") return <Settings className={className} />;
   return <FolderGit2 className={className} />;
 }
 
@@ -1919,6 +2184,20 @@ function makeRepositoriesPane(rootPath: string, panes: PaneState[], placement: P
   };
 }
 
+function makeSettingsPane(panes: PaneState[], placement: PaneState["placement"]): SettingsPaneState {
+  const now = nowIso();
+  return {
+    id: `settings:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 7)}`,
+    type: "settings",
+    title: "Settings",
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: maxPaneZ(panes) + 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 function clonePaneForSplit(pane: PaneState, panes: PaneState[]): PaneState {
   const now = nowIso();
   const rect = defaultPaneRect(panes.length);
@@ -1972,7 +2251,7 @@ function insertPaneIntoLayout(
   activePaneId: string | null,
   paneId: string,
 ): TiledLayoutNode {
-  if (!layout) return { type: "leaf", paneId };
+  if (!layout) return leafForPane(paneId);
   if (layoutContains(layout, paneId)) return layout;
   return splitLayoutAt(layout, activePaneId, paneId, "horizontal");
 }
@@ -1983,7 +2262,7 @@ function splitLayoutAt(
   newPaneId: string,
   direction: "horizontal" | "vertical",
 ): TiledLayoutNode {
-  if (!layout) return { type: "leaf", paneId: newPaneId };
+  if (!layout) return leafForPane(newPaneId);
   if (!targetPaneId) {
     return {
       type: "split",
@@ -1991,18 +2270,18 @@ function splitLayoutAt(
       direction,
       ratio: 0.5,
       first: layout,
-      second: { type: "leaf", paneId: newPaneId },
+      second: leafForPane(newPaneId),
     };
   }
   if (layout.type === "leaf") {
-    if (layout.paneId === targetPaneId) {
+    if (leafPaneIds(layout).includes(targetPaneId)) {
       return {
         type: "split",
-        id: `split:${layout.paneId}:${newPaneId}:${Date.now().toString(36)}`,
+        id: `split:${targetPaneId}:${newPaneId}:${Date.now().toString(36)}`,
         direction,
         ratio: 0.5,
-        first: layout,
-        second: { type: "leaf", paneId: newPaneId },
+        first: activateLayoutTab(layout, targetPaneId) ?? layout,
+        second: leafForPane(newPaneId),
       };
     }
     return layout;
@@ -2025,13 +2304,20 @@ function splitLayoutAt(
     direction,
     ratio: 0.5,
     first: layout,
-    second: { type: "leaf", paneId: newPaneId },
+    second: leafForPane(newPaneId),
   };
 }
 
 function removePaneFromLayout(layout: TiledLayoutNode | null, paneId: string): TiledLayoutNode | null {
   if (!layout) return null;
-  if (layout.type === "leaf") return layout.paneId === paneId ? null : layout;
+  if (layout.type === "leaf") {
+    const remainingPaneIds = leafPaneIds(layout).filter((id) => id !== paneId);
+    if (remainingPaneIds.length === 0) return null;
+    const activePaneId = remainingPaneIds.includes(layout.activePaneId ?? layout.paneId)
+      ? (layout.activePaneId ?? layout.paneId)
+      : remainingPaneIds[0]!;
+    return { type: "leaf", paneId: activePaneId, paneIds: remainingPaneIds, activePaneId };
+  }
   const first = removePaneFromLayout(layout.first, paneId);
   const second = removePaneFromLayout(layout.second, paneId);
   if (first && second) return { ...layout, first, second };
@@ -2054,8 +2340,57 @@ function updateLayoutSplitRatio(
 }
 
 function layoutContains(layout: TiledLayoutNode, paneId: string): boolean {
-  if (layout.type === "leaf") return layout.paneId === paneId;
+  if (layout.type === "leaf") return leafPaneIds(layout).includes(paneId);
   return layoutContains(layout.first, paneId) || layoutContains(layout.second, paneId);
+}
+
+function addPaneToLayoutTab(
+  layout: TiledLayoutNode | null,
+  targetPaneId: string,
+  newPaneId: string,
+): TiledLayoutNode {
+  if (!layout) return leafForPane(newPaneId);
+  if (layout.type === "leaf") {
+    if (!leafPaneIds(layout).includes(targetPaneId)) return layout;
+    const paneIds = Array.from(new Set([...leafPaneIds(layout), newPaneId]));
+    return { type: "leaf", paneId: newPaneId, paneIds, activePaneId: newPaneId };
+  }
+  if (layoutContains(layout.first, targetPaneId)) {
+    return { ...layout, first: addPaneToLayoutTab(layout.first, targetPaneId, newPaneId) };
+  }
+  if (layoutContains(layout.second, targetPaneId)) {
+    return { ...layout, second: addPaneToLayoutTab(layout.second, targetPaneId, newPaneId) };
+  }
+  return splitLayoutAt(layout, targetPaneId, newPaneId, "horizontal");
+}
+
+function activateLayoutTab(layout: TiledLayoutNode | null, paneId: string): TiledLayoutNode | null {
+  if (!layout) return null;
+  if (layout.type === "leaf") {
+    const paneIds = leafPaneIds(layout);
+    if (!paneIds.includes(paneId)) return layout;
+    return { type: "leaf", paneId, paneIds, activePaneId: paneId };
+  }
+  return {
+    ...layout,
+    first: activateLayoutTab(layout.first, paneId) ?? layout.first,
+    second: activateLayoutTab(layout.second, paneId) ?? layout.second,
+  };
+}
+
+function leafForPane(paneId: string): TiledLayoutNode {
+  return { type: "leaf", paneId, paneIds: [paneId], activePaneId: paneId };
+}
+
+function leafPaneIds(layout: Extract<TiledLayoutNode, { type: "leaf" }>): string[] {
+  const paneIds = layout.paneIds && layout.paneIds.length > 0 ? layout.paneIds : [layout.paneId];
+  return Array.from(new Set([...paneIds, layout.paneId]));
+}
+
+function firstPaneIdInLayout(layout: TiledLayoutNode | null): string | null {
+  if (!layout) return null;
+  if (layout.type === "leaf") return layout.activePaneId ?? layout.paneId;
+  return firstPaneIdInLayout(layout.first) ?? firstPaneIdInLayout(layout.second);
 }
 
 function findEntry(fileTrees: Map<string, FsEntry[]>, path: string): FsEntry | null {
@@ -2069,6 +2404,7 @@ function detailForPane(pane: PaneState): string {
   if (pane.type === "browser") return pane.url;
   if (pane.type === "explorer") return pane.folderPath;
   if (pane.type === "sourceControl") return pane.repoPath ?? "workspace";
+  if (pane.type === "settings") return "workspace settings";
   return pane.rootPath;
 }
 

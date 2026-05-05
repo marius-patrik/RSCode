@@ -32,8 +32,13 @@ test("creates and persists an initial workspace", async () => {
   expect(active.id).toBe(list.activeWorkspaceId);
   expect(active.rootPath).toBe(process.cwd());
   expect(active.activeView).toBe("panes");
+  expect(active.settings).toEqual({ theme: "dark", defaultView: "panes", tabbedPanes: true });
   expect(active.panes[0]?.type).toBe("explorer");
   expect(active.tiledLayout?.type).toBe("leaf");
+  if (active.tiledLayout?.type === "leaf") {
+    expect(active.tiledLayout.paneIds).toEqual([active.panes[0]!.id]);
+    expect(active.tiledLayout.activePaneId).toBe(active.panes[0]!.id);
+  }
 });
 
 test("migrates legacy sessions to workspaces and discards graph data", async () => {
@@ -105,6 +110,64 @@ test("switches, saves, and closes workspaces", async () => {
   const closed = await store.closeWorkspace(created.id);
   expect(closed.workspaces.some((workspace) => workspace.id === created.id)).toBe(false);
   expect(closed.activeWorkspaceId).toBeTruthy();
+});
+
+test("persists workspace settings and tabbed tiled leaves", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const workspace = await store.getActiveWorkspace();
+  const now = new Date().toISOString();
+  const editorOne = {
+    id: "editor:one",
+    type: "editor" as const,
+    title: "one.ts",
+    filePath: join(process.cwd(), "one.ts"),
+    draftBody: "const one = 1;\n",
+    dirty: false,
+    placement: "tiled" as const,
+    rect: { x: 0, y: 0, width: 600, height: 400 },
+    z: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const editorTwo = {
+    ...editorOne,
+    id: "editor:two",
+    title: "two.ts",
+    filePath: join(process.cwd(), "two.ts"),
+    draftBody: "const two = 2;\n",
+  };
+  const explorerId = workspace.panes[0]!.id;
+
+  const saved = await store.saveWorkspace({
+    ...workspace,
+    settings: { theme: "light", defaultView: "canvas", tabbedPanes: false },
+    panes: [...workspace.panes, editorOne, editorTwo],
+    tiledLayout: {
+      type: "leaf",
+      paneId: editorTwo.id,
+      paneIds: [explorerId, editorOne.id, editorTwo.id],
+      activePaneId: editorTwo.id,
+    },
+    activePaneId: editorTwo.id,
+  });
+
+  expect(saved.settings).toEqual({ theme: "light", defaultView: "canvas", tabbedPanes: false });
+  expect(saved.tiledLayout?.type).toBe("leaf");
+  if (saved.tiledLayout?.type === "leaf") {
+    expect(saved.tiledLayout.paneIds).toEqual([explorerId, editorOne.id, editorTwo.id]);
+    expect(saved.tiledLayout.activePaneId).toBe(editorTwo.id);
+  }
+
+  const pruned = await store.saveWorkspace({
+    ...saved,
+    panes: saved.panes.filter((pane) => pane.id !== editorTwo.id),
+  });
+  expect(pruned.tiledLayout?.type).toBe("leaf");
+  if (pruned.tiledLayout?.type === "leaf") {
+    expect(pruned.tiledLayout.paneIds).toEqual([explorerId, editorOne.id]);
+    expect(pruned.tiledLayout.activePaneId).toBe(explorerId);
+  }
 });
 
 test("workspace API handlers expose list, create, save, and close contracts", async () => {

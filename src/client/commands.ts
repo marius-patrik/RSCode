@@ -4,7 +4,7 @@ export type CommandScope =
   | "global"
   | "workspace"
   | "filesystem"
-  | "panel"
+  | "pane"
   | "browser"
   | "git"
   | "navigation";
@@ -31,7 +31,7 @@ export type CommandDefinition = {
 export type CommandContext = {
   rootPath: string;
   selectedPath: string | null;
-  activePanelId: string | null;
+  activePaneId: string | null;
 };
 
 export function enabled(): CommandAvailability {
@@ -75,7 +75,7 @@ function labelForGroup(group: string): string {
   if (group === "workspace") return "Workspace";
   if (group === "new") return "New";
   if (group === "item") return "Item";
-  if (group === "panel") return "Panel";
+  if (group === "pane") return "Pane";
   if (group === "browser") return "Browser";
   if (group === "git") return "Source Control";
   if (group === "navigation") return "Navigation";

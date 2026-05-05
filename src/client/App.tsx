@@ -43,6 +43,12 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("canvas-theme") !== "light";
   });
+  const activeTheme = activeWorkspace?.settings.theme ?? null;
+
+  useEffect(() => {
+    if (!activeTheme) return;
+    setDarkMode(activeTheme === "dark");
+  }, [activeTheme]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -368,13 +374,11 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         activeView={activeWorkspace?.activeView ?? "panes"}
-        darkMode={darkMode}
         onSwitchWorkspace={(id) => void switchWorkspace(id)}
         onCreateWorkspace={() => void createWorkspace()}
         onRenameWorkspace={renameWorkspace}
         onCloseWorkspace={closeWorkspace}
         onToggleView={toggleActiveView}
-        onToggleTheme={() => setDarkMode((current) => !current)}
         commandQuery={commandQuery}
         onCommandQueryChange={setCommandQuery}
         commandGroups={commandGroups}

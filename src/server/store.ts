@@ -13,6 +13,7 @@ import {
   type PaneRect,
   type PaneState,
   type RepositoriesPaneState,
+  type SettingsPaneState,
   type SourceControlPaneState,
   type TerminalPaneState,
   type TiledLayoutNode,
@@ -447,8 +448,9 @@ function makeWorkspace(args: { label: string; rootPath: string; nowIso: string }
     label: args.label,
     rootPath: args.rootPath,
     activeView: "panes",
+    settings: { theme: "dark", defaultView: "panes", tabbedPanes: true },
     panes: [explorer],
-    tiledLayout: { type: "leaf", paneId: explorer.id },
+    tiledLayout: leafForPane(explorer.id),
     canvasViewport: defaultViewport(),
     activePaneId: explorer.id,
     createdAt: args.nowIso,
@@ -497,6 +499,7 @@ function normalizeWorkspace(workspace: Workspace): Workspace {
   const activePaneId = workspace.activePaneId && paneIds.has(workspace.activePaneId) ? workspace.activePaneId : (panes[0]?.id ?? null);
   return workspaceSchema.parse({
     ...workspace,
+    settings: workspace.settings ?? { theme: "dark", defaultView: "panes", tabbedPanes: true },
     panes,
     tiledLayout,
     activePaneId,
@@ -526,7 +529,7 @@ function normalizePane(pane: PaneState, index: number, rootPath: string): PaneSt
 
 function layoutForPanes(panes: PaneState[]): TiledLayoutNode | null {
   if (panes.length === 0) return null;
-  let layout: TiledLayoutNode = { type: "leaf", paneId: panes[0]!.id };
+  let layout: TiledLayoutNode = leafForPane(panes[0]!.id);
   for (const pane of panes.slice(1)) {
     layout = {
       type: "split",
@@ -534,7 +537,7 @@ function layoutForPanes(panes: PaneState[]): TiledLayoutNode | null {
       direction: "horizontal",
       ratio: 0.5,
       first: layout,
-      second: { type: "leaf", paneId: pane.id },
+      second: leafForPane(pane.id),
     };
   }
   return layout;
@@ -542,7 +545,12 @@ function layoutForPanes(panes: PaneState[]): TiledLayoutNode | null {
 
 function pruneLayout(layout: TiledLayoutNode | null, paneIds: Set<string>): TiledLayoutNode | null {
   if (!layout) return null;
-  if (layout.type === "leaf") return paneIds.has(layout.paneId) ? layout : null;
+  if (layout.type === "leaf") {
+    const tabIds = leafPaneIds(layout).filter((paneId) => paneIds.has(paneId));
+    if (tabIds.length === 0) return null;
+    const activePaneId = tabIds.includes(layout.activePaneId ?? layout.paneId) ? (layout.activePaneId ?? layout.paneId) : tabIds[0]!;
+    return { type: "leaf", paneId: activePaneId, paneIds: tabIds, activePaneId };
+  }
   const first = pruneLayout(layout.first, paneIds);
   const second = pruneLayout(layout.second, paneIds);
   if (first && second) return { ...layout, first, second };
@@ -551,6 +559,15 @@ function pruneLayout(layout: TiledLayoutNode | null, paneIds: Set<string>): Tile
 
 function layoutNodeKey(layout: TiledLayoutNode): string {
   return layout.type === "leaf" ? layout.paneId : layout.id;
+}
+
+function leafForPane(paneId: string): TiledLayoutNode {
+  return { type: "leaf", paneId, paneIds: [paneId], activePaneId: paneId };
+}
+
+function leafPaneIds(layout: Extract<TiledLayoutNode, { type: "leaf" }>): string[] {
+  const paneIds = layout.paneIds && layout.paneIds.length > 0 ? layout.paneIds : [layout.paneId];
+  return Array.from(new Set([...paneIds, layout.paneId]));
 }
 
 function summarizeWorkspace(workspace: Workspace): WorkspaceSummary {
@@ -615,6 +632,7 @@ function migrateLegacySession(raw: Record<string, unknown>, fallbackId: string):
     label,
     rootPath,
     activeView: "panes",
+    settings: { theme: "dark", defaultView: "panes", tabbedPanes: true },
     panes,
     tiledLayout: layoutForPanes(panes.filter((pane) => pane.placement === "tiled")),
     canvasViewport: defaultViewport(),
@@ -816,6 +834,23 @@ export function makeRepositoriesPane(
     type: "repositories",
     title: "Repositories",
     rootPath,
+    placement,
+    rect: defaultPaneRect(panes.length),
+    z: panes.length,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+export function makeSettingsPane(
+  panes: PaneState[],
+  placement: PaneState["placement"] = "tiled",
+): SettingsPaneState {
+  const nowIso = now();
+  return {
+    id: `${makePaneId("settings", "workspace")}:${Date.now().toString(36)}`,
+    type: "settings",
+    title: "Settings",
     placement,
     rect: defaultPaneRect(panes.length),
     z: panes.length,

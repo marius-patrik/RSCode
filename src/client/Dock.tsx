@@ -10,11 +10,10 @@ import {
   GitBranch,
   Globe2,
   Grid2X2,
-  Moon,
   Pencil,
   Plus,
   RefreshCw,
-  Sun,
+  Settings,
   Terminal,
   X,
 } from "lucide-react";
@@ -25,13 +24,11 @@ type DockProps = {
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
   activeView: "panes" | "canvas";
-  darkMode: boolean;
   onSwitchWorkspace: (id: string) => void;
   onCreateWorkspace: () => void;
   onRenameWorkspace: (id: string) => void;
   onCloseWorkspace: (id: string) => void;
   onToggleView: () => void;
-  onToggleTheme: () => void;
   commandQuery: string;
   onCommandQueryChange: (next: string) => void;
   commandGroups: ActionGroup[];
@@ -45,13 +42,11 @@ export function Dock({
   workspaces,
   activeWorkspaceId,
   activeView,
-  darkMode,
   onSwitchWorkspace,
   onCreateWorkspace,
   onRenameWorkspace,
   onCloseWorkspace,
   onToggleView,
-  onToggleTheme,
   commandQuery,
   onCommandQueryChange,
   commandGroups,
@@ -87,6 +82,7 @@ export function Dock({
     { id: "pane.open.browser", title: "Browser", icon: Globe2 },
     { id: "pane.open.repositories", title: "Repositories", icon: FolderGit2 },
     { id: "pane.open.source-control", title: "Source Control", icon: GitBranch },
+    { id: "pane.open.settings", title: "Settings", icon: Settings },
   ] as const;
 
   function submitTop() {
@@ -179,9 +175,6 @@ export function Dock({
               </DockIconButton>
             );
           })}
-          <DockIconButton title={darkMode ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleTheme}>
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </DockIconButton>
         </div>
 
         <input

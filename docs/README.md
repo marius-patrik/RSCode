@@ -1,6 +1,6 @@
 # canvas
 
-Canvas is the local filesystem and executable-graph dev UI for Commonwealth.
+Canvas is the local workspace and pane-based dev UI for Commonwealth.
 It is intentionally separate from Andromeda, which owns agent harness work.
 
 ## Source Of Truth
@@ -12,15 +12,15 @@ It is intentionally separate from Andromeda, which owns agent harness work.
 ## Role In Commonwealth
 
 - Provides local filesystem browsing and editing.
-- Provides executable graph workflows for filesystem and terminal actions.
-- Exports a future `CanvasMount` for Workspace.
+- Provides tiled panes, canvas panes, terminals, readonly git inspection, and backend browser panes.
+- Exports `CanvasMount` for Workspace.
 - Moves shared backend state behind Mainframe over time.
 
 ## Current Status
 
-Implemented Bun/React app with multi-session canvas state, Monaco editor
-panels, terminal panels, filesystem APIs, graph execution, and verification
-scripts.
+Implemented Bun/React app with workspace persistence, Monaco editor panes,
+terminal panes, filesystem APIs, readonly git panes, backend Chromium browser
+panes, and verification scripts.
 
 ## Run
 
