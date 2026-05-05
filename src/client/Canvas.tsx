@@ -3,10 +3,35 @@ import { MonacoEditor, languageForFile } from "@/client/MonacoEditor";
 import { TERMINAL_INPUT_EVENT, TerminalNodeView } from "@/client/TerminalNode";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/client/commands";
 import { urlForLauncherQuery } from "@/client/launcher";
+import {
+  clonePaneForSplit,
+  makeBrowserPane,
+  makeEditorPane,
+  makeExplorerPane,
+  makeRepositoriesPane,
+  makeSettingsPane,
+  makeSourceControlPane,
+  makeTerminalPane,
+} from "@/client/paneFactory";
+import {
+  activateLayoutTab,
+  addPaneToLayoutTab,
+  clampPaneRect as clampRect,
+  firstPaneIdInLayout,
+  insertPaneIntoLayout,
+  leafPaneIds,
+  maxPaneZ,
+  offsetDropRect,
+  removePaneFromLayout,
+  splitLayoutAt,
+  updateLayoutSplitRatio,
+} from "@/client/paneLayout";
+import { THEME_COLOR_FIELDS, colorInputValue, makeCustomTheme, resolveWorkspaceTheme } from "@/client/theme";
 import type {
   BrowserPaneState,
   EditorPaneState,
   ExplorerPaneState,
+  FsEntry,
   GitDiff,
   GitRepository,
   GitStatus,
@@ -19,13 +44,12 @@ import type {
   TiledLayoutNode,
   Workspace,
   WorkspaceSettings,
-  WorkspaceThemeColorKey,
-  WorkspaceThemeColors,
   WorkspaceThemeDefinition,
 } from "@/shared/schema";
-import { BUILTIN_WORKSPACE_THEMES, DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS } from "@/shared/schema";
+import { BUILTIN_WORKSPACE_THEMES, DEFAULT_WORKSPACE_SETTINGS } from "@/shared/schema";
 import { cn } from "@/shared/utils";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Code2,
@@ -56,8 +80,6 @@ import {
   useRef,
   useState,
 } from "react";
-
-export type FsEntry = { kind: "dir" | "file"; name: string; path: string };
 
 type CanvasProps = {
   workspace: Workspace;
@@ -102,30 +124,7 @@ type ModalRequest =
       onConfirm: () => void;
     };
 
-const MIN_PANE_WIDTH = 300;
-const MIN_PANE_HEIGHT = 220;
 const PANE_TAB_MIME = "application/x-canvas-pane-tab";
-const THEME_COLOR_FIELDS: Array<{ key: WorkspaceThemeColorKey; label: string }> = [
-  { key: "background", label: "Background" },
-  { key: "foreground", label: "Text" },
-  { key: "muted", label: "Muted Surface" },
-  { key: "mutedForeground", label: "Muted Text" },
-  { key: "primary", label: "Accent" },
-  { key: "primaryForeground", label: "Accent Text" },
-  { key: "secondary", label: "Secondary Surface" },
-  { key: "secondaryForeground", label: "Secondary Text" },
-  { key: "border", label: "Border" },
-  { key: "ring", label: "Focus Ring" },
-  { key: "surface1", label: "Surface 1" },
-  { key: "surface2", label: "Surface 2" },
-  { key: "surfaceHover", label: "Hover Surface" },
-  { key: "panelBg", label: "Pane Glass" },
-  { key: "chromeBg", label: "Chrome Glass" },
-  { key: "dockBg", label: "Dock Glass" },
-  { key: "controlBg", label: "Control Glass" },
-  { key: "inputBg", label: "Input Glass" },
-  { key: "gridLine", label: "Grid Line" },
-];
 
 export function Canvas({
   workspace: incomingWorkspace,
@@ -1628,7 +1627,7 @@ function SettingsPane({
   onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
 }) {
   const settings = workspace.settings;
-  const activeTheme = themeForSettings(settings);
+  const activeTheme = resolveWorkspaceTheme(settings);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-auto p-4">
