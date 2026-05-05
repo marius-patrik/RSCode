@@ -82,6 +82,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<AppModal | null>(null);
   const saveSequenceRef = useRef<Map<string, number>>(new Map());
+  const saveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
   const activeTheme = useMemo(() => resolveWorkspaceTheme(activeWorkspace?.settings), [activeWorkspace?.settings]);
 
   useEffect(() => {
@@ -231,7 +232,8 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       setWorkspaces((prev) =>
         prev.map((workspace) => (workspace.id === nextWorkspace.id ? summarizeWorkspace(nextWorkspace) : workspace)),
       );
-      void (async () => {
+      const previousSave = saveQueueRef.current.get(nextWorkspace.id) ?? Promise.resolve();
+      const saveTask = previousSave.catch(() => undefined).then(async () => {
         try {
           const saved = (await client.workspace.save.mutate({ workspace: nextWorkspace })) as { workspace: Workspace };
           if (saveSequenceRef.current.get(saved.workspace.id) !== nextSequence) return;
@@ -242,7 +244,11 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
         }
-      })();
+      });
+      saveQueueRef.current.set(nextWorkspace.id, saveTask);
+      void saveTask.finally(() => {
+        if (saveQueueRef.current.get(nextWorkspace.id) === saveTask) saveQueueRef.current.delete(nextWorkspace.id);
+      });
     },
     [client],
   );

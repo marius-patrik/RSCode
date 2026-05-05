@@ -2440,7 +2440,7 @@ function insertPaneIntoLayout(
   return splitLayoutAt(layout, activePaneId, paneId, "horizontal");
 }
 
-function splitLayoutAt(
+export function splitLayoutAt(
   layout: TiledLayoutNode | null,
   targetPaneId: string | null,
   newPaneId: string,
@@ -2492,7 +2492,7 @@ function splitLayoutAt(
   };
 }
 
-function removePaneFromLayout(layout: TiledLayoutNode | null, paneId: string): TiledLayoutNode | null {
+export function removePaneFromLayout(layout: TiledLayoutNode | null, paneId: string): TiledLayoutNode | null {
   if (!layout) return null;
   if (layout.type === "leaf") {
     const remainingPaneIds = leafPaneIds(layout).filter((id) => id !== paneId);
@@ -2528,7 +2528,7 @@ function layoutContains(layout: TiledLayoutNode, paneId: string): boolean {
   return layoutContains(layout.first, paneId) || layoutContains(layout.second, paneId);
 }
 
-function addPaneToLayoutTab(
+export function addPaneToLayoutTab(
   layout: TiledLayoutNode | null,
   targetPaneId: string,
   newPaneId: string,
@@ -2566,7 +2566,7 @@ function leafForPane(paneId: string): TiledLayoutNode {
   return { type: "leaf", paneId, paneIds: [paneId], activePaneId: paneId };
 }
 
-function leafPaneIds(layout: Extract<TiledLayoutNode, { type: "leaf" }>): string[] {
+export function leafPaneIds(layout: Extract<TiledLayoutNode, { type: "leaf" }>): string[] {
   const paneIds = layout.paneIds && layout.paneIds.length > 0 ? layout.paneIds : [layout.paneId];
   return Array.from(new Set([...paneIds, layout.paneId]));
 }

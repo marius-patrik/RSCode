@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { addPaneToLayoutTab, leafPaneIds, removePaneFromLayout, splitLayoutAt } from "@/client/Canvas";
 import { DEFAULT_FOLDER_LIMIT, layoutVisibleTree } from "@/client/layout";
-import type { FsEntry } from "@/shared/schema";
+import type { FsEntry, TiledLayoutNode } from "@/shared/schema";
 
 test("large expanded folders are capped and get a load-more node", () => {
   const root = "/workspace";
@@ -61,3 +62,44 @@ test("nested tree layout reserves vertical space for expanded children", () => {
   expect(aNode?.position.y).toBeLessThan(bNode?.position.y ?? 0);
   expect((bNode?.position.y ?? 0) - (aNode?.position.y ?? 0)).toBeGreaterThan(120);
 });
+
+test("new pane tabs stay in the target tiled leaf", () => {
+  const layout = splitLayoutAt(leaf("left"), "left", "right", "horizontal");
+  const next = addPaneToLayoutTab(layout, "left", "left:tab");
+
+  expect(next.type).toBe("split");
+  if (next.type !== "split") return;
+  expect(next.first.type).toBe("leaf");
+  expect(next.second.type).toBe("leaf");
+  if (next.first.type !== "leaf" || next.second.type !== "leaf") return;
+  expect(leafPaneIds(next.first)).toEqual(["left", "left:tab"]);
+  expect(next.first.activePaneId).toBe("left:tab");
+  expect(leafPaneIds(next.second)).toEqual(["right"]);
+});
+
+test("dragging a tab between tiled leaves moves it without adding a split", () => {
+  const layout: TiledLayoutNode = {
+    type: "split",
+    id: "split:left:right",
+    direction: "horizontal",
+    ratio: 0.5,
+    first: { type: "leaf", paneId: "left", paneIds: ["left", "left:tab"], activePaneId: "left:tab" },
+    second: leaf("right"),
+  };
+
+  const removed = removePaneFromLayout(layout, "left:tab");
+  const moved = addPaneToLayoutTab(removed, "right", "left:tab");
+
+  expect(moved.type).toBe("split");
+  if (moved.type !== "split") return;
+  expect(moved.first.type).toBe("leaf");
+  expect(moved.second.type).toBe("leaf");
+  if (moved.first.type !== "leaf" || moved.second.type !== "leaf") return;
+  expect(leafPaneIds(moved.first)).toEqual(["left"]);
+  expect(leafPaneIds(moved.second)).toEqual(["right", "left:tab"]);
+  expect(moved.second.activePaneId).toBe("left:tab");
+});
+
+function leaf(paneId: string): Extract<TiledLayoutNode, { type: "leaf" }> {
+  return { type: "leaf", paneId, paneIds: [paneId], activePaneId: paneId };
+}
