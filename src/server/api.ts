@@ -27,11 +27,6 @@ const paneIdSchema = z.string().trim().min(1);
 export const api = {
   health: () => ({ ok: true, ts: Date.now() }),
 
-  runtime: {
-    status: (ctx: AppContext) => ctx.store.getRuntimeStatus(),
-    logs: async (ctx: AppContext) => ({ content: await ctx.store.readLogTail() }),
-  },
-
   fs: {
     tree: schema(z.object({ path: fsPathSchema }), async (_ctx, input) => ({
       entries: await listFsTree(input.path),
@@ -108,10 +103,6 @@ export const api = {
   },
 
   browser: {
-    session: schema(
-      z.object({ workspaceId: workspaceIdSchema, paneId: paneIdSchema }),
-      async (ctx, input) => ({ browser: await ctx.store.getBrowserSession(input.workspaceId, input.paneId) }),
-    ),
     navigate: schema(
       z.object({
         workspaceId: workspaceIdSchema,

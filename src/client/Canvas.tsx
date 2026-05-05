@@ -60,6 +60,7 @@ import {
   GitBranch,
   Globe2,
   Grid2X2,
+  GripVertical,
   Maximize2,
   PanelLeft,
   Plus,
@@ -133,13 +134,7 @@ export function Canvas({
   launcherTerminalRequest,
   onLauncherTerminalRequestHandled,
 }: CanvasProps) {
-  const workspace = useMemo<Workspace>(
-    () => ({
-      ...incomingWorkspace,
-      settings: { ...DEFAULT_WORKSPACE_SETTINGS, ...(incomingWorkspace.settings ?? {}) },
-    }),
-    [incomingWorkspace],
-  );
+  const workspace = incomingWorkspace;
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<WorkspaceModalRequest | null>(null);
@@ -1052,21 +1047,75 @@ function PaneFrame({
     >
       <header
         className={cn(
-          "flex h-9 shrink-0 select-none items-center gap-2 border-b border-border bg-secondary px-2",
-          dragHandleProps && "cursor-grab active:cursor-grabbing",
+          "flex h-9 shrink-0 select-none items-center gap-2 border-b border-border bg-[var(--chrome-bg)] px-2",
         )}
-        {...dragHandleProps}
       >
-        {showTabs ? <span className="min-w-0 flex-1" /> : null}
-        {!showTabs ? (
-          <>
-            {paneIcon(pane.type, "h-3.5 w-3.5")}
-            <span className="min-w-0 flex-1 truncate text-xs font-semibold">
-              {pane.title}
-              {pane.type === "editor" && pane.dirty ? " *" : ""}
-            </span>
-          </>
+        {dragHandleProps ? (
+          <button
+            type="button"
+            title="Move pane"
+            aria-label="Move pane"
+            className="inline-flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-foreground active:cursor-grabbing"
+            {...dragHandleProps}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
         ) : null}
+        <div className="min-w-0 flex-1">
+          {showTabs ? (
+            <div className="flex h-8 min-w-0 items-end gap-1 overflow-x-auto pt-1">
+              {tabs.map((tab) => {
+                const selected = tab.id === pane.id;
+                return (
+                  <div
+                    key={tab.id}
+                    title={tab.title}
+                    draggable
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      onFocusPane(tab.id);
+                    }}
+                    onDragStart={(event) => {
+                      event.stopPropagation();
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData(PANE_TAB_MIME, tab.id);
+                      event.dataTransfer.setData("text/plain", tab.title);
+                    }}
+                    className={cn(
+                      "flex h-7 min-w-0 max-w-[190px] cursor-grab items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs active:cursor-grabbing",
+                      selected
+                        ? "border-border bg-[var(--panel-bg)] text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-foreground",
+                    )}
+                  >
+                    <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+                      {paneIcon(tab.type, "h-3.5 w-3.5 shrink-0")}
+                      <span className="truncate">{tab.title}</span>
+                      {tab.type === "editor" && tab.dirty ? <span className="shrink-0">*</span> : null}
+                    </button>
+                    <button
+                      type="button"
+                      title="Close tab"
+                      className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-[var(--surface-hover)]"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => onClosePane(tab.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-1.5">
+              {paneIcon(pane.type, "h-3.5 w-3.5 shrink-0")}
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                {pane.title}
+                {pane.type === "editor" && pane.dirty ? " *" : ""}
+              </span>
+            </div>
+          )}
+        </div>
         {pane.type === "editor" ? (
           <HeaderButton title="Save" onClick={() => void onSaveEditor(pane)}>
             <Save className="h-3.5 w-3.5" />
@@ -1096,48 +1145,6 @@ function PaneFrame({
           <X className="h-3.5 w-3.5" />
         </HeaderButton>
       </header>
-      {showTabs ? (
-        <div className="flex h-8 shrink-0 items-end gap-1 overflow-x-auto border-b border-border bg-[var(--chrome-bg)] px-1 pt-1">
-          {tabs.map((tab) => {
-            const selected = tab.id === pane.id;
-            return (
-              <div
-                key={tab.id}
-                title={tab.title}
-                draggable
-                onDragStart={(event) => {
-                  event.stopPropagation();
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData(PANE_TAB_MIME, tab.id);
-                  event.dataTransfer.setData("text/plain", tab.title);
-                }}
-                className={cn(
-                  "flex h-7 min-w-0 max-w-[180px] cursor-grab items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs active:cursor-grabbing",
-                  selected ? "border-border bg-secondary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onFocusPane(tab.id)}
-                  className="flex min-w-0 flex-1 items-center gap-1.5"
-                >
-                  {paneIcon(tab.type, "h-3.5 w-3.5 shrink-0")}
-                  <span className="truncate">{tab.title}</span>
-                  {tab.type === "editor" && tab.dirty ? <span className="shrink-0">*</span> : null}
-                </button>
-                <button
-                  type="button"
-                  title="Close tab"
-                  className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-[var(--surface-hover)]"
-                  onClick={() => onClosePane(tab.id)}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
       <div className="min-h-0 flex-1 overflow-hidden">
         {pane.type === "explorer" ? (
           <ExplorerPane

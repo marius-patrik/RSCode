@@ -6,16 +6,6 @@ export const fsEntrySchema = z.object({
   path: z.string(),
 });
 
-export const runtimeStatusSchema = z.object({
-  pid: z.number().int().positive().nullable(),
-  startedAt: z.string().nullable(),
-  port: z.number().int().positive(),
-  url: z.string(),
-  logPath: z.string(),
-  workspacePath: z.string(),
-  isHealthy: z.boolean(),
-});
-
 export const viewportStateSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -184,23 +174,23 @@ export const DEFAULT_THEME_COLORS = {
   light: {
     background: "#ffffff",
     foreground: "#050505",
-    muted: "rgba(0, 0, 0, 0.045)",
+    muted: "rgba(0, 0, 0, 0.035)",
     mutedForeground: "#646464",
     primary: "rgba(5, 5, 5, 0.9)",
     primaryForeground: "#ffffff",
-    secondary: "rgba(255, 255, 255, 0.66)",
+    secondary: "rgba(255, 255, 255, 0.62)",
     secondaryForeground: "#050505",
-    border: "rgba(0, 0, 0, 0.1)",
+    border: "rgba(0, 0, 0, 0.095)",
     ring: "rgba(5, 5, 5, 0.42)",
-    surface1: "rgba(255, 255, 255, 0.5)",
-    surface2: "rgba(255, 255, 255, 0.68)",
-    surfaceHover: "rgba(0, 0, 0, 0.075)",
-    panelBg: "rgba(255, 255, 255, 0.72)",
-    chromeBg: "rgba(255, 255, 255, 0.58)",
-    dockBg: "rgba(255, 255, 255, 0.76)",
+    surface1: "rgba(255, 255, 255, 0.46)",
+    surface2: "rgba(255, 255, 255, 0.64)",
+    surfaceHover: "rgba(0, 0, 0, 0.065)",
+    panelBg: "rgba(255, 255, 255, 0.7)",
+    chromeBg: "rgba(255, 255, 255, 0.64)",
+    dockBg: "rgba(255, 255, 255, 0.74)",
     controlBg: "rgba(255, 255, 255, 0.52)",
-    inputBg: "rgba(255, 255, 255, 0.58)",
-    gridLine: "rgba(0, 0, 0, 0.045)",
+    inputBg: "rgba(255, 255, 255, 0.62)",
+    gridLine: "rgba(0, 0, 0, 0.038)",
   },
 } as const;
 
@@ -244,7 +234,6 @@ export const workspaceSettingsSchema = z.object({
   theme: z.string().trim().min(1).default("dark"),
   defaultView: z.enum(["panes", "canvas"]).default("panes"),
   backgroundStyle: z.enum(["grid", "flat", "dot"]).default("grid"),
-  accentColor: z.enum(["neutral", "blue", "green", "amber", "red", "violet"]).default("neutral"),
   customThemes: z.array(workspaceThemeDefinitionSchema).default([]),
   tabbedPanes: z.boolean().default(true),
 });
@@ -253,7 +242,6 @@ export const DEFAULT_WORKSPACE_SETTINGS = {
   theme: "dark" as const,
   defaultView: "panes" as const,
   backgroundStyle: "grid" as const,
-  accentColor: "neutral" as const,
   customThemes: [],
   tabbedPanes: true,
 };
@@ -263,7 +251,7 @@ export const workspaceSchema = z.object({
   label: z.string().trim().min(1),
   rootPath: z.string().trim().min(1),
   activeView: z.enum(["panes", "canvas"]).default("panes"),
-  settings: workspaceSettingsSchema.default(DEFAULT_WORKSPACE_SETTINGS),
+  settings: workspaceSettingsSchema,
   panes: z.array(paneStateSchema).default([]),
   tiledLayout: tiledLayoutNodeSchema.nullable().default(null),
   canvasViewport: viewportStateSchema,
@@ -330,7 +318,6 @@ export const browserSessionSchema = z.object({
 });
 
 export type FsEntry = z.infer<typeof fsEntrySchema>;
-export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;
 export type ViewportState = z.infer<typeof viewportStateSchema>;
 export type PaneRect = z.infer<typeof paneRectSchema>;
 export type PaneType = z.infer<typeof paneTypeSchema>;

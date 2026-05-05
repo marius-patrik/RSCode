@@ -1,6 +1,6 @@
-import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
-import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
+import { getPaths } from "@/shared/paths";
 import {
   type BrowserPaneState,
   type BrowserSession,
@@ -150,40 +150,13 @@ export class CanvasStore {
     await this.ensureWorkspacesInitialized();
   }
 
-  async appendLog(line: string) {
-    await ensureDir(dirname(this.paths.serviceLogFile));
-    await appendFile(this.paths.serviceLogFile, `${line}\n`, "utf8");
-  }
-
-  async readLogTail(lines = 200): Promise<string> {
-    try {
-      const content = await readFile(this.paths.serviceLogFile, "utf8");
-      return content.split(/\r?\n/).slice(-lines).join("\n");
-    } catch {
-      return "";
-    }
-  }
-
-  async getRuntimeStatus() {
-    const raw = await readJson<Record<string, unknown>>(this.paths.runtimeFile);
-    return {
-      pid: typeof raw?.pid === "number" ? raw.pid : null,
-      startedAt: typeof raw?.startedAt === "string" ? raw.startedAt : null,
-      port: getServicePort(),
-      url: getServiceUrl(),
-      logPath: this.paths.serviceLogFile,
-      workspacePath: process.cwd(),
-      isHealthy: true,
-    };
-  }
-
   async ensureWorkspacesInitialized() {
     await ensureDir(this.paths.workspacesDir);
     const existing = await this.readWorkspaceIndex();
     const existingIds: string[] = [];
     if (existing) {
       for (const id of existing.workspaceIds) {
-        if (await exists(this.workspacePath(id))) existingIds.push(id);
+        if (await this.loadWorkspace(id)) existingIds.push(id);
       }
     }
     if (existing && existingIds.length > 0) {
@@ -457,7 +430,6 @@ function normalizeWorkspace(workspace: Workspace): Workspace {
   const activePaneId = workspace.activePaneId && paneIds.has(workspace.activePaneId) ? workspace.activePaneId : (panes[0]?.id ?? null);
   return workspaceSchema.parse({
     ...workspace,
-    settings: workspace.settings ?? DEFAULT_WORKSPACE_SETTINGS,
     panes,
     tiledLayout,
     activePaneId,

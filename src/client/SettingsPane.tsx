@@ -1,4 +1,9 @@
-import { THEME_COLOR_FIELDS, colorInputValue, makeCustomTheme, resolveWorkspaceTheme } from "@/client/theme";
+import {
+  THEME_COLOR_FIELDS,
+  colorInputValue,
+  makeCustomTheme,
+  resolveWorkspaceTheme,
+} from "@/client/theme";
 import {
   BUILTIN_WORKSPACE_THEMES,
   type SettingsPaneState,
@@ -29,6 +34,17 @@ export function SettingsPane({
             detail="Active palette."
             control={
               <ThemeSelector
+                settings={settings}
+                activeTheme={activeTheme}
+                onUpdateSettings={onUpdateSettings}
+              />
+            }
+          />
+          <SettingRow
+            title="Mode"
+            detail="Choose black or white app chrome."
+            control={
+              <ThemeModeControl
                 settings={settings}
                 activeTheme={activeTheme}
                 onUpdateSettings={onUpdateSettings}
@@ -95,6 +111,39 @@ export function SettingsPane({
         </div>
       </div>
     </div>
+  );
+}
+
+function ThemeModeControl({
+  settings,
+  activeTheme,
+  onUpdateSettings,
+}: {
+  settings: WorkspaceSettings;
+  activeTheme: WorkspaceThemeDefinition;
+  onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
+}) {
+  const customTheme = settings.customThemes.find((theme) => theme.id === settings.theme) ?? null;
+  return (
+    <SegmentedControl
+      value={customTheme?.mode ?? activeTheme.mode}
+      options={[
+        { value: "dark", label: "Dark" },
+        { value: "light", label: "Light" },
+      ]}
+      onChange={(value) => {
+        const mode = value as WorkspaceThemeDefinition["mode"];
+        if (!customTheme) {
+          onUpdateSettings({ theme: mode });
+          return;
+        }
+        onUpdateSettings({
+          customThemes: settings.customThemes.map((theme) =>
+            theme.id === customTheme.id ? { ...theme, mode } : theme,
+          ),
+        });
+      }}
+    />
   );
 }
 
@@ -247,10 +296,11 @@ function ThemeColorInput({
           onChange={(event) => onChange(event.target.value)}
           className="min-w-0 flex-1 rounded border border-border bg-[var(--input-bg)] px-2 py-1 font-mono text-[11px] outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed"
         />
-        <button
-          type="button"
-          disabled={disabled}
-          className="relative h-7 w-7 shrink-0 overflow-hidden rounded border border-border disabled:cursor-not-allowed"
+        <label
+          className={cn(
+            "relative h-7 w-7 shrink-0 overflow-hidden rounded border border-border",
+            disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+          )}
         >
           <input
             type="color"
@@ -259,7 +309,7 @@ function ThemeColorInput({
             onChange={(event) => onChange(event.target.value)}
             className="absolute inset-[-4px] h-10 w-10 cursor-pointer disabled:cursor-not-allowed"
           />
-        </button>
+        </label>
       </span>
     </label>
   );
@@ -315,7 +365,7 @@ function SegmentedControl({
           onClick={() => onChange(option.value)}
           className={cn(
             "h-7 rounded px-3 text-xs transition-colors",
-            option.value === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+            option.value === value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {option.label}

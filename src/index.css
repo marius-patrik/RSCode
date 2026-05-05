@@ -29,23 +29,23 @@
   --radius: 0.5rem;
   --background: #ffffff;
   --foreground: #050505;
-  --muted: rgba(0, 0, 0, 0.045);
+  --muted: rgba(0, 0, 0, 0.035);
   --muted-foreground: #646464;
   --primary: rgba(5, 5, 5, 0.9);
   --primary-foreground: #ffffff;
-  --secondary: rgba(255, 255, 255, 0.66);
+  --secondary: rgba(255, 255, 255, 0.62);
   --secondary-foreground: #050505;
-  --border: rgba(0, 0, 0, 0.1);
+  --border: rgba(0, 0, 0, 0.095);
   --ring: rgba(5, 5, 5, 0.42);
-  --surface-1: rgba(255, 255, 255, 0.5);
-  --surface-2: rgba(255, 255, 255, 0.68);
-  --surface-hover: rgba(0, 0, 0, 0.075);
-  --panel-bg: rgba(255, 255, 255, 0.72);
-  --chrome-bg: rgba(255, 255, 255, 0.58);
-  --dock-bg: rgba(255, 255, 255, 0.76);
+  --surface-1: rgba(255, 255, 255, 0.46);
+  --surface-2: rgba(255, 255, 255, 0.64);
+  --surface-hover: rgba(0, 0, 0, 0.065);
+  --panel-bg: rgba(255, 255, 255, 0.7);
+  --chrome-bg: rgba(255, 255, 255, 0.64);
+  --dock-bg: rgba(255, 255, 255, 0.74);
   --control-bg: rgba(255, 255, 255, 0.52);
-  --input-bg: rgba(255, 255, 255, 0.58);
-  --grid-line: rgba(0, 0, 0, 0.045);
+  --input-bg: rgba(255, 255, 255, 0.62);
+  --grid-line: rgba(0, 0, 0, 0.038);
 }
 
 .dark {
@@ -97,6 +97,26 @@ textarea,
 button,
 select {
   font-family: inherit;
+}
+
+* {
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 #root {

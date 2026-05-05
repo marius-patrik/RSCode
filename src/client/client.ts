@@ -4,7 +4,6 @@ import type {
   GitDiff,
   GitRepository,
   GitStatus,
-  RuntimeStatus,
   Workspace,
   WorkspaceSummary,
 } from "@/shared/schema";
@@ -12,11 +11,6 @@ import type {
 type FileKind = "markdown" | "json" | "yaml" | "typescript" | "plain";
 
 export type CanvasClient = {
-  health(): Promise<{ ok: true; ts: number }>;
-  runtime: {
-    status(): Promise<RuntimeStatus>;
-    logs(): Promise<{ content: string }>;
-  };
   fs: {
     tree(input: { path: string }): Promise<{ entries: FsEntry[] }>;
     readFile(input: { path: string }): Promise<{ body: string }>;
@@ -41,7 +35,6 @@ export type CanvasClient = {
     diff(input: { repoPath: string; path?: string }): Promise<{ diff: GitDiff }>;
   };
   browser: {
-    session(input: { workspaceId: string; paneId: string }): Promise<{ browser: BrowserSession }>;
     navigate(input: {
       workspaceId: string;
       paneId: string;
@@ -85,11 +78,6 @@ function getBaseUrl() {
 
 export function makeClient(url = getBaseUrl()): CanvasClient {
   return {
-    health: () => post(url, "health"),
-    runtime: {
-      status: () => post(url, "runtime.status"),
-      logs: () => post(url, "runtime.logs"),
-    },
     fs: {
       tree: (input) => post(url, "fs.tree", input),
       readFile: (input) => post(url, "fs.readFile", input),
@@ -114,7 +102,6 @@ export function makeClient(url = getBaseUrl()): CanvasClient {
       diff: (input) => post(url, "git.diff", input),
     },
     browser: {
-      session: (input) => post(url, "browser.session", input),
       navigate: (input) => post(url, "browser.navigate", input),
     },
   };

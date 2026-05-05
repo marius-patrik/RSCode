@@ -3,7 +3,7 @@ import { Canvas } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
 import { urlForLauncherQuery } from "@/client/launcher";
-import { applyWorkspaceTheme, resolveWorkspaceTheme, workspaceWithSettingsDefaults } from "@/client/theme";
+import { applyWorkspaceTheme, resolveWorkspaceTheme } from "@/client/theme";
 import type { FsEntry, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/shared/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -416,16 +416,11 @@ export default function App() {
 }
 
 export function workspaceForEntry(workspace: Workspace): Workspace {
-  const normalized = workspaceWithDefaults(workspace);
-  return { ...normalized, activeView: normalized.settings.defaultView };
+  return { ...workspace, activeView: workspace.settings.defaultView };
 }
 
 export function workspaceForCurrentView(workspace: Workspace, current: Workspace): Workspace {
-  return { ...workspaceWithDefaults(workspace), activeView: current.activeView };
-}
-
-function workspaceWithDefaults(workspace: Workspace): Workspace {
-  return workspaceWithSettingsDefaults(workspace);
+  return { ...workspace, activeView: current.activeView };
 }
 
 function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {

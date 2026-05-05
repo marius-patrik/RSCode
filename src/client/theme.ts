@@ -2,7 +2,6 @@ import {
   BUILTIN_WORKSPACE_THEMES,
   DEFAULT_THEME_COLORS,
   DEFAULT_WORKSPACE_SETTINGS,
-  type Workspace,
   type WorkspaceSettings,
   type WorkspaceThemeColorKey,
   type WorkspaceThemeColors,
@@ -52,14 +51,6 @@ const THEME_CSS_VARIABLES: Array<[keyof WorkspaceThemeColors, string]> = [
   ["inputBg", "--input-bg"],
   ["gridLine", "--grid-line"],
 ];
-
-export function workspaceWithSettingsDefaults(workspace: Workspace): Workspace {
-  return { ...workspace, settings: settingsForWorkspace(workspace) };
-}
-
-export function settingsForWorkspace(workspace: Workspace): WorkspaceSettings {
-  return { ...DEFAULT_WORKSPACE_SETTINGS, ...(workspace.settings ?? {}) };
-}
 
 export function resolveWorkspaceTheme(settings: WorkspaceSettings | undefined | null): WorkspaceThemeDefinition {
   const normalized = { ...DEFAULT_WORKSPACE_SETTINGS, ...(settings ?? {}) };

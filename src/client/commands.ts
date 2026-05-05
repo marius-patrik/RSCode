@@ -28,12 +28,6 @@ export type CommandDefinition = {
   run: () => void | Promise<void>;
 };
 
-export type CommandContext = {
-  rootPath: string;
-  selectedPath: string | null;
-  activePaneId: string | null;
-};
-
 export function enabled(): CommandAvailability {
   return { enabled: true };
 }

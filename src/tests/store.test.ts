@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
 import type { AppContext } from "@/server/api";
 import { CanvasStore } from "@/server/store";
-import { DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace, workspaceSchema } from "@/shared/schema";
+import { DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace } from "@/shared/schema";
 
 let canvasHome = "";
 
@@ -39,25 +39,6 @@ test("creates and persists an initial workspace", async () => {
     expect(active.tiledLayout.paneIds).toEqual([active.panes[0]!.id]);
     expect(active.tiledLayout.activePaneId).toBe(active.panes[0]!.id);
   }
-});
-
-test("defaults missing workspace settings during schema parsing", () => {
-  const now = new Date().toISOString();
-  const parsed = workspaceSchema.parse({
-    id: "workspace:missing-settings",
-    label: "Missing Settings",
-    rootPath: process.cwd(),
-    activeView: "panes",
-    panes: [],
-    tiledLayout: null,
-    canvasViewport: { x: 0, y: 0, zoom: 1 },
-    activePaneId: null,
-    createdAt: now,
-    updatedAt: now,
-    lastOpenedAt: now,
-  });
-
-  expect(parsed.settings).toEqual(DEFAULT_WORKSPACE_SETTINGS);
 });
 
 test("switches, saves, and closes workspaces", async () => {
@@ -122,7 +103,6 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
       theme: "custom:test",
       defaultView: "canvas",
       backgroundStyle: "dot",
-      accentColor: "blue",
       customThemes: [customTheme],
       tabbedPanes: false,
     },
@@ -140,7 +120,6 @@ test("persists workspace settings and tabbed tiled leaves", async () => {
     theme: "custom:test",
     defaultView: "canvas",
     backgroundStyle: "dot",
-    accentColor: "blue",
     customThemes: [customTheme],
     tabbedPanes: false,
   });
