@@ -19,6 +19,7 @@ import type {
   Workspace,
   WorkspaceSettings,
 } from "@/shared/schema";
+import { DEFAULT_WORKSPACE_SETTINGS } from "@/shared/schema";
 import { cn } from "@/shared/utils";
 import {
   ChevronDown,
@@ -96,7 +97,7 @@ const MIN_PANE_WIDTH = 300;
 const MIN_PANE_HEIGHT = 220;
 
 export function Canvas({
-  workspace,
+  workspace: incomingWorkspace,
   fileTrees,
   repositories,
   gitStatuses,
@@ -113,6 +114,13 @@ export function Canvas({
   onRequestGitDiff,
   onBrowserNavigate,
 }: CanvasProps) {
+  const workspace = useMemo<Workspace>(
+    () => ({
+      ...incomingWorkspace,
+      settings: { ...DEFAULT_WORKSPACE_SETTINGS, ...(incomingWorkspace.settings ?? {}) },
+    }),
+    [incomingWorkspace],
+  );
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [finderOpen, setFinderOpen] = useState(false);
   const [finderQuery, setFinderQuery] = useState("");
@@ -276,7 +284,7 @@ export function Canvas({
 
   const updateSettings = useCallback(
     (patch: Partial<WorkspaceSettings>) => {
-      const settings = { ...workspace.settings, ...patch };
+      const settings = { ...DEFAULT_WORKSPACE_SETTINGS, ...workspace.settings, ...patch };
       updateWorkspace({
         settings,
         activeView: patch.defaultView ?? workspace.activeView,

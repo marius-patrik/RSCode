@@ -4,6 +4,7 @@ import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
 import {
   type BrowserPaneState,
   type BrowserSession,
+  DEFAULT_WORKSPACE_SETTINGS,
   type EditorPaneState,
   type ExplorerPaneState,
   type FsEntry,
@@ -448,7 +449,7 @@ function makeWorkspace(args: { label: string; rootPath: string; nowIso: string }
     label: args.label,
     rootPath: args.rootPath,
     activeView: "panes",
-    settings: { theme: "dark", defaultView: "panes", tabbedPanes: true },
+    settings: DEFAULT_WORKSPACE_SETTINGS,
     panes: [explorer],
     tiledLayout: leafForPane(explorer.id),
     canvasViewport: defaultViewport(),
@@ -499,7 +500,7 @@ function normalizeWorkspace(workspace: Workspace): Workspace {
   const activePaneId = workspace.activePaneId && paneIds.has(workspace.activePaneId) ? workspace.activePaneId : (panes[0]?.id ?? null);
   return workspaceSchema.parse({
     ...workspace,
-    settings: workspace.settings ?? { theme: "dark", defaultView: "panes", tabbedPanes: true },
+    settings: workspace.settings ?? DEFAULT_WORKSPACE_SETTINGS,
     panes,
     tiledLayout,
     activePaneId,
@@ -632,7 +633,7 @@ function migrateLegacySession(raw: Record<string, unknown>, fallbackId: string):
     label,
     rootPath,
     activeView: "panes",
-    settings: { theme: "dark", defaultView: "panes", tabbedPanes: true },
+    settings: DEFAULT_WORKSPACE_SETTINGS,
     panes,
     tiledLayout: layoutForPanes(panes.filter((pane) => pane.placement === "tiled")),
     canvasViewport: defaultViewport(),

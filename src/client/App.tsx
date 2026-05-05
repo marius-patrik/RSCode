@@ -2,7 +2,7 @@ import type { ActionGroup } from "@/client/ActionsMenu";
 import { Canvas, type FsEntry } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
-import type { GitDiff, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/shared/schema";
+import { DEFAULT_WORKSPACE_SETTINGS, type GitDiff, type GitRepository, type GitStatus, type Workspace, type WorkspaceSummary } from "@/shared/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type CanvasMountProps = {
@@ -43,7 +43,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("canvas-theme") !== "light";
   });
-  const activeTheme = activeWorkspace?.settings.theme ?? null;
+  const activeTheme = activeWorkspace?.settings?.theme ?? DEFAULT_WORKSPACE_SETTINGS.theme;
 
   useEffect(() => {
     if (!activeTheme) return;

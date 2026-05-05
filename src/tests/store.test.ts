@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
 import type { AppContext } from "@/server/api";
 import { CanvasStore } from "@/server/store";
-import type { Workspace } from "@/shared/schema";
+import { DEFAULT_WORKSPACE_SETTINGS, type Workspace, workspaceSchema } from "@/shared/schema";
 
 let canvasHome = "";
 
@@ -32,13 +32,32 @@ test("creates and persists an initial workspace", async () => {
   expect(active.id).toBe(list.activeWorkspaceId);
   expect(active.rootPath).toBe(process.cwd());
   expect(active.activeView).toBe("panes");
-  expect(active.settings).toEqual({ theme: "dark", defaultView: "panes", tabbedPanes: true });
+  expect(active.settings).toEqual(DEFAULT_WORKSPACE_SETTINGS);
   expect(active.panes[0]?.type).toBe("explorer");
   expect(active.tiledLayout?.type).toBe("leaf");
   if (active.tiledLayout?.type === "leaf") {
     expect(active.tiledLayout.paneIds).toEqual([active.panes[0]!.id]);
     expect(active.tiledLayout.activePaneId).toBe(active.panes[0]!.id);
   }
+});
+
+test("defaults missing workspace settings during schema parsing", () => {
+  const now = new Date().toISOString();
+  const parsed = workspaceSchema.parse({
+    id: "workspace:missing-settings",
+    label: "Missing Settings",
+    rootPath: process.cwd(),
+    activeView: "panes",
+    panes: [],
+    tiledLayout: null,
+    canvasViewport: { x: 0, y: 0, zoom: 1 },
+    activePaneId: null,
+    createdAt: now,
+    updatedAt: now,
+    lastOpenedAt: now,
+  });
+
+  expect(parsed.settings).toEqual(DEFAULT_WORKSPACE_SETTINGS);
 });
 
 test("migrates legacy sessions to workspaces and discards graph data", async () => {

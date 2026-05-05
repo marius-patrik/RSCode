@@ -143,12 +143,18 @@ export const workspaceSettingsSchema = z.object({
   tabbedPanes: z.boolean().default(true),
 });
 
+export const DEFAULT_WORKSPACE_SETTINGS = {
+  theme: "dark",
+  defaultView: "panes",
+  tabbedPanes: true,
+} as const;
+
 export const workspaceSchema = z.object({
   id: z.string().trim().min(1),
   label: z.string().trim().min(1),
   rootPath: z.string().trim().min(1),
   activeView: z.enum(["panes", "canvas"]).default("panes"),
-  settings: workspaceSettingsSchema.default({ theme: "dark", defaultView: "panes", tabbedPanes: true }),
+  settings: workspaceSettingsSchema.default(DEFAULT_WORKSPACE_SETTINGS),
   panes: z.array(paneStateSchema).default([]),
   tiledLayout: tiledLayoutNodeSchema.nullable().default(null),
   canvasViewport: viewportStateSchema,
