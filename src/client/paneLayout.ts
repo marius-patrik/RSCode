@@ -45,7 +45,8 @@ export function insertPaneIntoLayout(
 ): TiledLayoutNode {
   if (!layout) return leafForPane(paneId);
   if (layoutContains(layout, paneId)) return layout;
-  return splitLayoutAt(layout, activePaneId, paneId, "horizontal");
+  const targetPaneId = activePaneId && layoutContains(layout, activePaneId) ? activePaneId : firstPaneIdInLayout(layout);
+  return splitLayoutAt(layout, targetPaneId, paneId, "horizontal");
 }
 
 export function splitLayoutAt(
@@ -138,7 +139,7 @@ export function addPaneToLayoutTab(
 ): TiledLayoutNode {
   if (!layout) return leafForPane(newPaneId);
   if (layout.type === "leaf") {
-    if (!leafPaneIds(layout).includes(targetPaneId)) return layout;
+    if (!leafPaneIds(layout).includes(targetPaneId)) return insertPaneIntoLayout(layout, targetPaneId, newPaneId);
     const paneIds = Array.from(new Set([...leafPaneIds(layout), newPaneId]));
     return { type: "leaf", paneId: newPaneId, paneIds, activePaneId: newPaneId };
   }
@@ -148,7 +149,7 @@ export function addPaneToLayoutTab(
   if (layoutContains(layout.second, targetPaneId)) {
     return { ...layout, second: addPaneToLayoutTab(layout.second, targetPaneId, newPaneId) };
   }
-  return splitLayoutAt(layout, targetPaneId, newPaneId, "horizontal");
+  return insertPaneIntoLayout(layout, targetPaneId, newPaneId);
 }
 
 export function activateLayoutTab(layout: TiledLayoutNode | null, paneId: string): TiledLayoutNode | null {

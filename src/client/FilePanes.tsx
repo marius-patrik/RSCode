@@ -182,10 +182,10 @@ export function EditorPane({
   );
 }
 
-export function TerminalPane({ pane }: { pane: TerminalPaneState }) {
+export function TerminalPane({ pane, baseUrl }: { pane: TerminalPaneState; baseUrl?: string }) {
   return (
     <div className="h-full p-2">
-      <TerminalNodeView cwd={pane.cwd} paneId={pane.id} />
+      <TerminalNodeView cwd={pane.cwd} paneId={pane.id} baseUrl={baseUrl} />
     </div>
   );
 }

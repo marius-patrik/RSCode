@@ -3,7 +3,7 @@ import { BrowserPane } from "@/client/BrowserPane";
 import { EditorPane, ExplorerPane, TerminalPane } from "@/client/FilePanes";
 import { RepositoriesPane, SourceControlPane } from "@/client/GitPanes";
 import { SettingsPane } from "@/client/SettingsPane";
-import { TERMINAL_INPUT_EVENT } from "@/client/TerminalNode";
+import { sendTerminalInput } from "@/client/TerminalNode";
 import { commandGroupsFor } from "@/client/commands";
 import {
   clonePaneForSplit,
@@ -81,6 +81,7 @@ import {
 } from "react";
 
 type CanvasProps = {
+  baseUrl?: string;
   workspace: Workspace;
   fileTrees: Map<string, FsEntry[]>;
   repositories: GitRepository[];
@@ -108,6 +109,7 @@ type CanvasProps = {
 const PANE_TAB_MIME = "application/x-canvas-pane-tab";
 
 export function Canvas({
+  baseUrl,
   workspace: incomingWorkspace,
   fileTrees,
   repositories,
@@ -173,29 +175,36 @@ export function Canvas({
 
   const focusPane = useCallback(
     (paneId: string) => {
+      const target = workspace.panes.find((pane) => pane.id === paneId);
       const topZ = maxPaneZ(workspace.panes) + 1;
       updateWorkspace({
         activePaneId: paneId,
+        activeView: target?.placement === "canvas" ? "canvas" : target ? "panes" : workspace.activeView,
         tiledLayout: activateLayoutTab(workspace.tiledLayout, paneId),
         panes: workspace.panes.map((pane) => (pane.id === paneId ? { ...pane, z: topZ, updatedAt: nowIso() } : pane)),
       });
     },
-    [updateWorkspace, workspace.panes, workspace.tiledLayout],
+    [updateWorkspace, workspace.activeView, workspace.panes, workspace.tiledLayout],
   );
 
   const addPane = useCallback(
     (pane: PaneState) => {
       const nextPanes = [...workspace.panes, pane];
+      const activeTiledPane = workspace.panes.find(
+        (candidate) => candidate.id === workspace.activePaneId && candidate.placement === "tiled",
+      );
       const tiledLayout =
         pane.placement === "tiled"
-          ? insertPaneIntoLayout(workspace.tiledLayout, workspace.activePaneId, pane.id)
+          ? workspace.settings.tabbedPanes && activeTiledPane
+            ? addPaneToLayoutTab(workspace.tiledLayout, activeTiledPane.id, pane.id)
+            : insertPaneIntoLayout(workspace.tiledLayout, activeTiledPane?.id ?? workspace.activePaneId, pane.id)
           : workspace.tiledLayout;
       commitWorkspace({
         ...workspace,
         panes: nextPanes,
         tiledLayout,
         activePaneId: pane.id,
-        activeView: pane.placement === "canvas" ? "canvas" : workspace.activeView,
+        activeView: pane.placement === "canvas" ? "canvas" : "panes",
       });
     },
     [commitWorkspace, workspace],
@@ -260,14 +269,23 @@ export function Canvas({
       workspace.panes.find((pane) => pane.id === workspace.activePaneId && pane.type === "terminal") ??
       workspace.panes.find((pane) => pane.type === "terminal");
     if (target?.type === "terminal") {
-      dispatchTerminalInput(target.id, launcherTerminalRequest.input);
+      focusPane(target.id);
+      sendTerminalInput(target.id, launcherTerminalRequest.input);
     } else {
       const pane = makeTerminalPane(workspace.rootPath, workspace.panes, "tiled");
       addPane(pane);
-      window.setTimeout(() => dispatchTerminalInput(pane.id, launcherTerminalRequest.input), 450);
+      sendTerminalInput(pane.id, launcherTerminalRequest.input);
     }
     onLauncherTerminalRequestHandled();
-  }, [addPane, launcherTerminalRequest, onLauncherTerminalRequestHandled, workspace.activePaneId, workspace.panes, workspace.rootPath]);
+  }, [
+    addPane,
+    focusPane,
+    launcherTerminalRequest,
+    onLauncherTerminalRequestHandled,
+    workspace.activePaneId,
+    workspace.panes,
+    workspace.rootPath,
+  ]);
 
   const openSourceControlPane = useCallback(
     (repoPath: string | null = repositories[0]?.rootPath ?? null, placement: PaneState["placement"] = "tiled") => {
@@ -284,15 +302,39 @@ export function Canvas({
   );
 
   const openSettingsPane = useCallback(
-    (placement: PaneState["placement"] = "tiled") => {
+    (placement: PaneState["placement"] = workspace.activeView === "canvas" ? "canvas" : "tiled") => {
       const existing = workspace.panes.find((pane) => pane.type === "settings");
       if (existing) {
+        if (existing.placement !== placement) {
+          const panes = workspace.panes.map((pane) =>
+            pane.id === existing.id ? { ...pane, placement, updatedAt: nowIso() } : pane,
+          );
+          const tiledLayout =
+            placement === "tiled"
+              ? insertPaneIntoLayout(workspace.tiledLayout, workspace.activePaneId, existing.id)
+              : removePaneFromLayout(workspace.tiledLayout, existing.id);
+          updateWorkspace({
+            panes,
+            tiledLayout,
+            activePaneId: existing.id,
+            activeView: placement === "canvas" ? "canvas" : "panes",
+          });
+          return;
+        }
         focusPane(existing.id);
         return;
       }
       addPane(makeSettingsPane(workspace.panes, placement));
     },
-    [addPane, focusPane, workspace.panes],
+    [
+      addPane,
+      focusPane,
+      updateWorkspace,
+      workspace.activePaneId,
+      workspace.activeView,
+      workspace.panes,
+      workspace.tiledLayout,
+    ],
   );
 
   const closePane = useCallback(
@@ -584,6 +626,7 @@ export function Canvas({
         <>
           <TiledWorkspace
             layout={workspace.tiledLayout}
+            baseUrl={baseUrl}
             panes={tiledPanes}
             activePaneId={workspace.activePaneId}
             workspace={workspace}
@@ -613,6 +656,7 @@ export function Canvas({
           />
           <FreeformLayer
             panes={floatingPanes}
+            baseUrl={baseUrl}
             workspace={workspace}
             fileTrees={fileTrees}
             repositories={repositories}
@@ -643,6 +687,7 @@ export function Canvas({
       ) : (
         <CanvasWorkspace
           panes={workspace.panes}
+          baseUrl={baseUrl}
           workspace={workspace}
           fileTrees={fileTrees}
           repositories={repositories}
@@ -773,6 +818,7 @@ function TiledNode({ layout, panes, onUpdateSplitRatio, ...props }: TiledWorkspa
 }
 
 type PaneRenderProps = {
+  baseUrl?: string;
   workspace: Workspace;
   fileTrees: Map<string, FsEntry[]>;
   repositories: GitRepository[];
@@ -947,6 +993,7 @@ function PaneFrame({
   active,
   mode,
   tabs,
+  baseUrl,
   workspace,
   fileTrees,
   repositories,
@@ -1105,9 +1152,9 @@ function PaneFrame({
           />
         ) : null}
         {pane.type === "editor" ? <EditorPane pane={pane} onUpdatePane={onUpdatePane} onSaveEditor={onSaveEditor} /> : null}
-        {pane.type === "terminal" ? <TerminalPane pane={pane} /> : null}
+        {pane.type === "terminal" ? <TerminalPane pane={pane} baseUrl={baseUrl} /> : null}
         {pane.type === "browser" ? (
-          <BrowserPane workspaceId={workspace.id} pane={pane} onBrowserNavigate={onBrowserNavigate} />
+          <BrowserPane workspaceId={workspace.id} pane={pane} baseUrl={baseUrl} onBrowserNavigate={onBrowserNavigate} />
         ) : null}
         {pane.type === "sourceControl" ? (
           <SourceControlPane
@@ -1210,10 +1257,6 @@ function paneIcon(type: PaneType, className: string) {
   if (type === "sourceControl") return <GitBranch className={className} />;
   if (type === "settings") return <Settings className={className} />;
   return <FolderGit2 className={className} />;
-}
-
-function dispatchTerminalInput(paneId: string, input: string): void {
-  window.dispatchEvent(new CustomEvent(TERMINAL_INPUT_EVENT, { detail: { paneId, input } }));
 }
 
 function nowIso(): string {

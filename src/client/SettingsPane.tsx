@@ -22,7 +22,7 @@ export function SettingsPane({
   const activeTheme = resolveWorkspaceTheme(settings);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-auto px-4 pb-20 pt-4">
         <div className="mx-auto grid max-w-2xl gap-4">
           <SettingRow
             title="Theme"

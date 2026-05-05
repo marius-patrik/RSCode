@@ -1,3 +1,4 @@
+import { websocketUrl } from "@/client/endpoints";
 import { urlForLauncherQuery } from "@/client/launcher";
 import type { BrowserPaneState } from "@/shared/schema";
 import { AlertTriangle, ChevronRight, Globe2 } from "lucide-react";
@@ -6,10 +7,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export function BrowserPane({
   workspaceId,
   pane,
+  baseUrl,
   onBrowserNavigate,
 }: {
   workspaceId: string;
   pane: BrowserPaneState;
+  baseUrl?: string;
   onBrowserNavigate: (workspaceId: string, paneId: string, url: string) => Promise<void>;
 }) {
   const [address, setAddress] = useState(pane.url);
@@ -22,8 +25,7 @@ export function BrowserPane({
   useEffect(() => setAddress(pane.url), [pane.url]);
 
   useEffect(() => {
-    const url = new URL("/api/browser/stream", window.location.origin);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    const url = new URL(websocketUrl(baseUrl, "/api/browser/stream"));
     url.searchParams.set("workspaceId", workspaceId);
     url.searchParams.set("paneId", pane.id);
     const ws = new WebSocket(url.toString());
@@ -56,7 +58,7 @@ export function BrowserPane({
       ws.onclose = null;
       ws.close();
     };
-  }, [pane.id, workspaceId]);
+  }, [baseUrl, pane.id, workspaceId]);
 
   useEffect(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

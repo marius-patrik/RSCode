@@ -1,3 +1,4 @@
+import { websocketUrl } from "@/client/endpoints";
 import type { IDisposable, ITheme, Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 
@@ -9,7 +10,16 @@ import { useEffect, useRef } from "react";
 
 export const TERMINAL_INPUT_EVENT = "canvas:terminal-input";
 
-export function TerminalNodeView({ cwd, paneId }: { cwd: string; paneId: string }) {
+const pendingInputs = new Map<string, string[]>();
+
+export function sendTerminalInput(paneId: string, input: string): void {
+  const queue = pendingInputs.get(paneId) ?? [];
+  queue.push(input);
+  pendingInputs.set(paneId, queue);
+  window.dispatchEvent(new CustomEvent(TERMINAL_INPUT_EVENT, { detail: { paneId } }));
+}
+
+export function TerminalNodeView({ cwd, paneId, baseUrl }: { cwd: string; paneId: string; baseUrl?: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -47,12 +57,12 @@ export function TerminalNodeView({ cwd, paneId }: { cwd: string; paneId: string 
       });
       themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
 
-      const url = new URL("/api/terminal/spawn", window.location.origin);
+      const url = new URL(websocketUrl(baseUrl, "/api/terminal/spawn"));
       url.searchParams.set("cwd", cwd);
-      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(url.toString());
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
+      ws.onopen = () => flushPendingInput(paneId, ws);
 
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
@@ -81,15 +91,15 @@ export function TerminalNodeView({ cwd, paneId }: { cwd: string; paneId: string 
       try { wsRef.current?.close(); } catch { /* */ }
       try { term?.dispose(); } catch { /* */ }
     };
-  }, [cwd]);
+  }, [baseUrl, cwd, paneId]);
 
   useEffect(() => {
     function handleInput(event: Event) {
-      const detail = (event as CustomEvent<{ paneId: string; input: string }>).detail;
+      const detail = (event as CustomEvent<{ paneId: string }>).detail;
       if (detail?.paneId !== paneId) return;
       const ws = wsRef.current;
-      if (ws?.readyState !== WebSocket.OPEN) return;
-      ws.send(`${detail.input}\n`);
+      if (!ws) return;
+      flushPendingInput(paneId, ws);
     }
     window.addEventListener(TERMINAL_INPUT_EVENT, handleInput);
     return () => window.removeEventListener(TERMINAL_INPUT_EVENT, handleInput);
@@ -104,6 +114,14 @@ export function TerminalNodeView({ cwd, paneId }: { cwd: string; paneId: string 
       onWheel={(e) => e.stopPropagation()}
     />
   );
+}
+
+function flushPendingInput(paneId: string, ws: WebSocket): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  const queue = pendingInputs.get(paneId);
+  if (!queue?.length) return;
+  pendingInputs.delete(paneId);
+  for (const input of queue) ws.send(`${input}\n`);
 }
 
 function terminalTheme(): ITheme {

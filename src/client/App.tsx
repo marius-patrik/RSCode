@@ -355,6 +355,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         <div key={activeWorkspace?.id ?? "loading"} className="h-full">
           {activeWorkspace ? (
             <Canvas
+              baseUrl={baseUrl}
               workspace={activeWorkspace}
               fileTrees={fileTrees}
               repositories={repositories}
