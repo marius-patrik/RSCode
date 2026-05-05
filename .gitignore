@@ -1,0 +1,23 @@
+node_modules/
+.DS_Store
+dist/
+build/
+out/
+*.log
+.env
+.env.local
+
+# rsbuild output
+**/dist/
+
+# agents/<id>/ tracked subdirs: skills/, memory/, sessions/, plans/, workspace.yaml
+# transient ones below are ignored (per-agent)
+agents/*/runtime/
+agents/*/logs/
+agents/*/live/
+agents/*/imports/
+agents/*/cache/
+agents/*/browser-profile/
+agents/*/file-history/
+agents/*/session-env/
+agents/*/shell-snapshots/
