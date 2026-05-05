@@ -1030,11 +1030,16 @@ function PaneFrame({
         )}
         {...dragHandleProps}
       >
-        {paneIcon(pane.type, "h-3.5 w-3.5")}
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold">
-          {pane.title}
-          {pane.type === "editor" && pane.dirty ? " *" : ""}
-        </span>
+        {showTabs ? <span className="min-w-0 flex-1" /> : null}
+        {!showTabs ? (
+          <>
+            {paneIcon(pane.type, "h-3.5 w-3.5")}
+            <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+              {pane.title}
+              {pane.type === "editor" && pane.dirty ? " *" : ""}
+            </span>
+          </>
+        ) : null}
         {pane.type === "editor" ? (
           <HeaderButton title="Save" onClick={() => void onSaveEditor(pane)}>
             <Save className="h-3.5 w-3.5" />
@@ -1616,7 +1621,6 @@ function RepositoriesPane({
 
 function SettingsPane({
   workspace,
-  pane,
   onUpdateSettings,
 }: {
   workspace: Workspace;
@@ -1627,10 +1631,6 @@ function SettingsPane({
   const activeTheme = themeForSettings(settings);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
-        <Settings className="h-4 w-4" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{pane.title}</span>
-      </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto grid max-w-2xl gap-4">
           <SettingRow
@@ -1688,13 +1688,13 @@ function SettingsPane({
                 aria-checked={settings.tabbedPanes}
                 onClick={() => onUpdateSettings({ tabbedPanes: !settings.tabbedPanes })}
                 className={cn(
-                  "relative h-6 w-11 rounded-full border border-border transition-colors",
-                  settings.tabbedPanes ? "bg-primary" : "bg-secondary",
+                  "relative h-6 w-11 rounded-full border border-border bg-[var(--control-bg)] transition-colors",
+                  settings.tabbedPanes && "border-ring",
                 )}
               >
                 <span
                   className={cn(
-                    "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-[var(--panel-bg)] transition-transform",
+                    "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-muted-foreground transition-transform",
                     settings.tabbedPanes ? "translate-x-5" : "translate-x-0.5",
                   )}
                 />

@@ -1,5 +1,5 @@
 import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
-import { Canvas, type FsEntry } from "@/client/Canvas";
+import { Canvas, type FsEntry, removePaneFromLayout } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
 import { urlForLauncherQuery } from "@/client/launcher";
@@ -10,6 +10,7 @@ import {
   type GitDiff,
   type GitRepository,
   type GitStatus,
+  type PaneState,
   type Workspace,
   type WorkspaceSettings,
   type WorkspaceSummary,
@@ -235,9 +236,13 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       const previousSave = saveQueueRef.current.get(nextWorkspace.id) ?? Promise.resolve();
       const saveTask = previousSave.catch(() => undefined).then(async () => {
         try {
-          const saved = (await client.workspace.save.mutate({ workspace: nextWorkspace })) as { workspace: Workspace };
+          const saved = (await client.workspace.save.mutate({ workspace: workspaceForPersistence(nextWorkspace) })) as {
+            workspace: Workspace;
+          };
           if (saveSequenceRef.current.get(saved.workspace.id) !== nextSequence) return;
-          setActiveWorkspace((current) => (current?.id === saved.workspace.id ? workspaceWithDefaults(saved.workspace) : current));
+          setActiveWorkspace((current) =>
+            current?.id === saved.workspace.id ? workspaceFromSaveResponse(current, saved.workspace) : current,
+          );
           setWorkspaces((prev) =>
             prev.map((workspace) => (workspace.id === saved.workspace.id ? summarizeWorkspace(saved.workspace) : workspace)),
           );
@@ -468,6 +473,41 @@ export function workspaceForCurrentView(workspace: Workspace, current: Workspace
 
 function workspaceWithDefaults(workspace: Workspace): Workspace {
   return { ...workspace, settings: settingsForWorkspace(workspace) };
+}
+
+function workspaceForPersistence(workspace: Workspace): Workspace {
+  const transientPaneIds = workspace.panes.filter(isTransientPane).map((pane) => pane.id);
+  if (transientPaneIds.length === 0) return workspace;
+  const transientIds = new Set(transientPaneIds);
+  const panes = workspace.panes.filter((pane) => !transientIds.has(pane.id));
+  let tiledLayout = workspace.tiledLayout;
+  for (const paneId of transientPaneIds) {
+    tiledLayout = removePaneFromLayout(tiledLayout, paneId);
+  }
+  return {
+    ...workspace,
+    panes,
+    tiledLayout,
+    activePaneId:
+      workspace.activePaneId && transientIds.has(workspace.activePaneId)
+        ? (panes.at(-1)?.id ?? null)
+        : workspace.activePaneId,
+  };
+}
+
+function workspaceFromSaveResponse(current: Workspace, saved: Workspace): Workspace {
+  const normalized = workspaceForCurrentView(saved, current);
+  if (!current.panes.some(isTransientPane)) return normalized;
+  return {
+    ...normalized,
+    panes: current.panes,
+    tiledLayout: current.tiledLayout,
+    activePaneId: current.activePaneId,
+  };
+}
+
+function isTransientPane(pane: PaneState): boolean {
+  return pane.type === "settings";
 }
 
 function settingsForWorkspace(workspace: Workspace) {
