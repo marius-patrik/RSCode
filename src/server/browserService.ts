@@ -4,13 +4,13 @@ import { join, resolve } from "node:path";
 import type { BrowserSession } from "@/shared/schema";
 import { type BrowserContext, type Page, chromium } from "playwright-chromium";
 
-type BrowserRenderer = "chromium" | "fallback";
+type BrowserRenderer = "chromium";
 
 export type BrowserFrameMessage = {
   type: "frame";
   url: string;
   image: string;
-  mimeType: "image/png" | "image/svg+xml";
+  mimeType: "image/png";
   renderer: BrowserRenderer;
   ts: number;
 };
@@ -50,44 +50,30 @@ export class BrowserFrameService {
     private readonly log: (line: string) => void | Promise<void>,
   ) {}
 
-  renderer(): BrowserRenderer {
-    return this.executablePath ? "chromium" : "fallback";
-  }
-
   async frameFor(session: BrowserSession): Promise<BrowserFrameMessage> {
-    if (this.executablePath) {
-      try {
-        const live = await this.liveBrowserFor(session);
-        await this.ensurePageUrl(live, session.url);
-        const bytes = await live.page.screenshot({ type: "png", fullPage: false });
-        return {
-          type: "frame",
-          url: live.page.url(),
-          image: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
-          mimeType: "image/png",
-          renderer: "chromium",
-          ts: Date.now(),
-        };
-      } catch (error) {
-        await this.log(`browser chromium capture failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
+    const live = await this.liveBrowserFor(session);
+    await this.ensurePageUrl(live, session.url);
+    const bytes = await live.page.screenshot({ type: "png", fullPage: false }).catch(async (error) => {
+      await this.log(`browser chromium capture failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    });
     return {
       type: "frame",
-      url: session.url,
-      image: fallbackSvgDataUrl(session.url),
-      mimeType: "image/svg+xml",
-      renderer: "fallback",
+      url: live.page.url(),
+      image: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
+      mimeType: "image/png",
+      renderer: "chromium",
       ts: Date.now(),
     };
   }
 
   async stateFor(session: BrowserSession): Promise<BrowserStateMessage> {
+    this.requireExecutablePath();
     await mkdir(resolve(this.profilesRoot, encodeURIComponent(session.workspaceId)), { recursive: true });
     return {
       type: "state",
       browser: session,
-      renderer: this.renderer(),
+      renderer: "chromium",
     };
   }
 
@@ -136,12 +122,12 @@ export class BrowserFrameService {
   }
 
   private async createLiveBrowser(session: BrowserSession): Promise<LiveBrowser> {
-    if (!this.executablePath) throw new Error("Chromium executable not configured");
+    const executablePath = this.requireExecutablePath();
     const userDataDir = join(session.profilePath, "chromium");
     await mkdir(userDataDir, { recursive: true });
     await clearChromiumSingletonFiles(userDataDir);
     const context = await chromium.launchPersistentContext(userDataDir, {
-      executablePath: this.executablePath,
+      executablePath,
       headless: true,
       viewport: VIEWPORT,
       deviceScaleFactor: 1,
@@ -164,6 +150,13 @@ export class BrowserFrameService {
     if (live.currentUrl === targetUrl && live.page.url() === targetUrl) return;
     await live.page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 12_000 });
     live.currentUrl = targetUrl;
+  }
+
+  private requireExecutablePath(): string {
+    if (!this.executablePath) {
+      throw new Error("Chromium executable not found. Install Playwright Chromium or set CHROMIUM_EXECUTABLE_PATH.");
+    }
+    return this.executablePath;
   }
 }
 
@@ -199,27 +192,6 @@ function safePlaywrightChromiumPath(): string | null {
   } catch {
     return null;
   }
-}
-
-function fallbackSvgDataUrl(url: string): string {
-  const escaped = escapeXml(url || "about:blank");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <rect width="1280" height="720" fill="#000000"/>
-  <rect x="0" y="0" width="1280" height="54" fill="#0d0d0d"/>
-  <rect x="104" y="12" width="1058" height="30" rx="6" fill="#000000" stroke="rgba(255,255,255,0.16)"/>
-  <text x="120" y="32" fill="#ffffff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">${escaped}</text>
-  <text x="44" y="132" fill="#ffffff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="30">Browser unavailable</text>
-  <text x="44" y="174" fill="#9b9b9b" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Install Playwright Chromium or set CHROMIUM_EXECUTABLE_PATH to enable rendered browser panes.</text>
-</svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 function clamp(value: number, min: number, max: number): number {

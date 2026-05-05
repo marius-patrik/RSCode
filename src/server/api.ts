@@ -91,38 +91,6 @@ export const api = {
     ),
   },
 
-  session: {
-    list: async (ctx: AppContext) => ctx.store.listWorkspaces(),
-    active: async (ctx: AppContext) => ({ session: await ctx.store.getActiveWorkspace() }),
-    get: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => ({
-      session: await ctx.store.getWorkspace(input.id),
-    })),
-    create: schema(
-      z.object({
-        label: z.string().trim().min(1).optional(),
-        rootPath: z.string().trim().min(1).optional(),
-      }),
-      async (ctx, input) => ({ session: await ctx.store.createWorkspace(input) }),
-    ),
-    save: schema(z.object({ session: workspaceSchema }), async (ctx, input) => ({
-      session: await ctx.store.saveWorkspace(input.session),
-    })),
-    rename: schema(
-      z.object({ id: workspaceIdSchema, label: z.string().trim().min(1) }),
-      async (ctx, input) => ({ session: await ctx.store.renameWorkspace(input.id, input.label) }),
-    ),
-    setActive: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => ({
-      session: await ctx.store.setActiveWorkspace(input.id),
-    })),
-    close: schema(z.object({ id: workspaceIdSchema }), async (ctx, input) => {
-      const result = await ctx.store.closeWorkspace(input.id);
-      return {
-        activeSessionId: result.activeWorkspaceId,
-        sessions: result.workspaces,
-      };
-    }),
-  },
-
   git: {
     repositories: schema(
       z.object({ rootPath: fsPathSchema, depth: z.number().int().min(0).max(10).optional() }),

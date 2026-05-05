@@ -1,5 +1,5 @@
 import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
-import { Canvas, type FsEntry, removePaneFromLayout } from "@/client/Canvas";
+import { Canvas, type FsEntry } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
 import { urlForLauncherQuery } from "@/client/launcher";
@@ -7,10 +7,8 @@ import {
   BUILTIN_WORKSPACE_THEMES,
   DEFAULT_THEME_COLORS,
   DEFAULT_WORKSPACE_SETTINGS,
-  type GitDiff,
   type GitRepository,
   type GitStatus,
-  type PaneState,
   type Workspace,
   type WorkspaceSettings,
   type WorkspaceSummary,
@@ -91,10 +89,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   }, [activeTheme]);
 
   const refreshWorkspaces = useCallback(async () => {
-    const result = (await client.workspace.list.query()) as {
-      activeWorkspaceId: string;
-      workspaces: WorkspaceSummary[];
-    };
+    const result = await client.workspace.list();
     setWorkspaces(result.workspaces);
     setActiveWorkspaceId(result.activeWorkspaceId);
     return result;
@@ -106,7 +101,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       try {
         const list = await refreshWorkspaces();
         const id = initialWorkspaceId ?? list.activeWorkspaceId;
-        const response = (await client.workspace.get.query({ id })) as { workspace: Workspace };
+        const response = await client.workspace.get({ id });
         if (cancelled) return;
         setActiveWorkspace(workspaceForEntry(response.workspace));
         setActiveWorkspaceId(response.workspace.id);
@@ -123,7 +118,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     (path: string) => {
       void (async () => {
         try {
-          const result = await client.fs.tree.query({ path });
+          const result = await client.fs.tree({ path });
           setFileTrees((prev) => {
             const next = new Map(prev);
             next.set(path, result.entries as FsEntry[]);
@@ -139,7 +134,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
   const onReadFile = useCallback(
     async (path: string) => {
-      const result = await client.fs.readFile.query({ path });
+      const result = await client.fs.readFile({ path });
       return result.body as string;
     },
     [client],
@@ -147,28 +142,28 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
   const onWriteFile = useCallback(
     async (path: string, body: string) => {
-      await client.fs.writeFile.mutate({ path, body });
+      await client.fs.writeFile({ path, body });
     },
     [client],
   );
 
   const onMkdir = useCallback(
     async (path: string) => {
-      await client.fs.mkdir.mutate({ path });
+      await client.fs.mkdir({ path });
     },
     [client],
   );
 
   const onCreateFile = useCallback(
     async (path: string, kind: "markdown" | "json" | "yaml" | "typescript" | "plain") => {
-      await client.fs.createFile.mutate({ path, kind });
+      await client.fs.createFile({ path, kind });
     },
     [client],
   );
 
   const onDeleteEntry = useCallback(
     async (path: string) => {
-      await client.fs.delete.mutate({ path });
+      await client.fs.delete({ path });
     },
     [client],
   );
@@ -177,9 +172,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     (rootPath: string) => {
       void (async () => {
         try {
-          const result = (await client.git.repositories.query({ rootPath })) as {
-            repositories: GitRepository[];
-          };
+          const result = await client.git.repositories({ rootPath });
           setRepositories(result.repositories);
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
@@ -191,7 +184,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
   const onRequestGitStatus = useCallback(
     async (repoPath: string) => {
-      const result = (await client.git.status.query({ repoPath })) as { status: GitStatus };
+      const result = await client.git.status({ repoPath });
       setGitStatuses((prev) => {
         const next = new Map(prev);
         next.set(repoPath, result.status);
@@ -204,7 +197,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
   const onRequestGitDiff = useCallback(
     async (repoPath: string, path: string) => {
-      const result = (await client.git.diff.query({ repoPath, path })) as { diff: GitDiff };
+      const result = await client.git.diff({ repoPath, path });
       return result.diff;
     },
     [client],
@@ -212,9 +205,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
   const onBrowserNavigate = useCallback(
     async (workspaceId: string, paneId: string, url: string) => {
-      const result = (await client.browser.navigate.mutate({ workspaceId, paneId, url })) as {
-        workspace: Workspace;
-      };
+      const result = await client.browser.navigate({ workspaceId, paneId, url });
       setActiveWorkspace((current) =>
         current?.id === result.workspace.id ? workspaceForCurrentView(result.workspace, current) : current,
       );
@@ -236,12 +227,10 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       const previousSave = saveQueueRef.current.get(nextWorkspace.id) ?? Promise.resolve();
       const saveTask = previousSave.catch(() => undefined).then(async () => {
         try {
-          const saved = (await client.workspace.save.mutate({ workspace: workspaceForPersistence(nextWorkspace) })) as {
-            workspace: Workspace;
-          };
+          const saved = await client.workspace.save({ workspace: nextWorkspace });
           if (saveSequenceRef.current.get(saved.workspace.id) !== nextSequence) return;
           setActiveWorkspace((current) =>
-            current?.id === saved.workspace.id ? workspaceFromSaveResponse(current, saved.workspace) : current,
+            current?.id === saved.workspace.id ? workspaceForCurrentView(saved.workspace, current) : current,
           );
           setWorkspaces((prev) =>
             prev.map((workspace) => (workspace.id === saved.workspace.id ? summarizeWorkspace(saved.workspace) : workspace)),
@@ -263,7 +252,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       if (id === activeWorkspaceId) return;
       setBusy(true);
       try {
-        const response = (await client.workspace.setActive.mutate({ id })) as { workspace: Workspace };
+        const response = await client.workspace.setActive({ id });
         setActiveWorkspace(workspaceForEntry(response.workspace));
         setActiveWorkspaceId(response.workspace.id);
         setCommandQuery("");
@@ -283,7 +272,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   const createWorkspace = useCallback(async () => {
     setBusy(true);
     try {
-      const response = (await client.workspace.create.mutate({})) as { workspace: Workspace };
+      const response = await client.workspace.create();
       setActiveWorkspace(workspaceForEntry(response.workspace));
       setActiveWorkspaceId(response.workspace.id);
       setFileTrees(new Map());
@@ -308,7 +297,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         onSubmit: (label) => {
           void (async () => {
             try {
-              const response = (await client.workspace.rename.mutate({ id, label })) as { workspace: Workspace };
+              const response = await client.workspace.rename({ id, label });
               if (response.workspace.id === activeWorkspace?.id) {
                 setActiveWorkspace((current) =>
                   current?.id === response.workspace.id ? workspaceForCurrentView(response.workspace, current) : current,
@@ -338,15 +327,10 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
           void (async () => {
             setBusy(true);
             try {
-              const response = (await client.workspace.close.mutate({ id })) as {
-                activeWorkspaceId: string;
-                workspaces: WorkspaceSummary[];
-              };
+              const response = await client.workspace.close({ id });
               setWorkspaces(response.workspaces);
               setActiveWorkspaceId(response.activeWorkspaceId);
-              const active = (await client.workspace.get.query({ id: response.activeWorkspaceId })) as {
-                workspace: Workspace;
-              };
+              const active = await client.workspace.get({ id: response.activeWorkspaceId });
               setActiveWorkspace(workspaceForEntry(active.workspace));
               setFileTrees(new Map());
               setRepositories([]);
@@ -473,41 +457,6 @@ export function workspaceForCurrentView(workspace: Workspace, current: Workspace
 
 function workspaceWithDefaults(workspace: Workspace): Workspace {
   return { ...workspace, settings: settingsForWorkspace(workspace) };
-}
-
-function workspaceForPersistence(workspace: Workspace): Workspace {
-  const transientPaneIds = workspace.panes.filter(isTransientPane).map((pane) => pane.id);
-  if (transientPaneIds.length === 0) return workspace;
-  const transientIds = new Set(transientPaneIds);
-  const panes = workspace.panes.filter((pane) => !transientIds.has(pane.id));
-  let tiledLayout = workspace.tiledLayout;
-  for (const paneId of transientPaneIds) {
-    tiledLayout = removePaneFromLayout(tiledLayout, paneId);
-  }
-  return {
-    ...workspace,
-    panes,
-    tiledLayout,
-    activePaneId:
-      workspace.activePaneId && transientIds.has(workspace.activePaneId)
-        ? (panes.at(-1)?.id ?? null)
-        : workspace.activePaneId,
-  };
-}
-
-function workspaceFromSaveResponse(current: Workspace, saved: Workspace): Workspace {
-  const normalized = workspaceForCurrentView(saved, current);
-  if (!current.panes.some(isTransientPane)) return normalized;
-  return {
-    ...normalized,
-    panes: current.panes,
-    tiledLayout: current.tiledLayout,
-    activePaneId: current.activePaneId,
-  };
-}
-
-function isTransientPane(pane: PaneState): boolean {
-  return pane.type === "settings";
 }
 
 function settingsForWorkspace(workspace: Workspace) {

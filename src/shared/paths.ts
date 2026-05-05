@@ -22,15 +22,12 @@ export function getPaths() {
   const root = getCanvasHome();
   const runtimeDir = resolve(root, "runtime");
   const logsDir = resolve(root, "logs");
-  const sessionsDir = resolve(root, "sessions");
   const workspacesDir = resolve(root, "workspaces");
   const browserProfilesDir = resolve(root, "browser-profiles");
   return {
     root,
     runtimeDir,
     logsDir,
-    sessionsDir,
-    sessionsIndexFile: resolve(sessionsDir, "index.json"),
     workspacesDir,
     workspacesIndexFile: resolve(workspacesDir, "index.json"),
     browserProfilesDir,

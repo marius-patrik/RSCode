@@ -241,7 +241,7 @@ export async function startServer() {
         url: command.url,
       });
     }
-    if (isBrowserInteractionMessage(command) && browserFrames.renderer() === "chromium") {
+    if (isBrowserInteractionMessage(command)) {
       try {
         const session = await store.getBrowserSession(ws.data.workspaceId, ws.data.paneId);
         const frame = await browserFrames.interact(session, command);

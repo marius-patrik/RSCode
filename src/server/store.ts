@@ -5,7 +5,6 @@ import {
   type BrowserPaneState,
   type BrowserSession,
   DEFAULT_WORKSPACE_SETTINGS,
-  type EditorPaneState,
   type ExplorerPaneState,
   type FsEntry,
   type GitDiff,
@@ -13,10 +12,6 @@ import {
   type GitStatus,
   type PaneRect,
   type PaneState,
-  type RepositoriesPaneState,
-  type SettingsPaneState,
-  type SourceControlPaneState,
-  type TerminalPaneState,
   type TiledLayoutNode,
   type Workspace,
   type WorkspaceIndex,
@@ -196,17 +191,6 @@ export class CanvasStore {
         ? existing.activeWorkspaceId
         : (existingIds[0] ?? existing.activeWorkspaceId);
       await this.writeWorkspaceIndex({ version: 1, activeWorkspaceId, workspaceIds: existingIds });
-      return;
-    }
-
-    const migrated = await this.migrateLegacySessions();
-    if (migrated.length > 0) {
-      for (const workspace of migrated) await this.writeWorkspace(workspace);
-      await this.writeWorkspaceIndex({
-        version: 1,
-        activeWorkspaceId: migrated[0]?.id ?? migrated[0]!.id,
-        workspaceIds: migrated.map((workspace) => workspace.id),
-      });
       return;
     }
 
@@ -413,33 +397,6 @@ export class CanvasStore {
   private async writeWorkspace(workspace: Workspace) {
     await writeJson(this.workspacePath(workspace.id), workspaceSchema.parse(normalizeWorkspace(workspace)));
   }
-
-  private async migrateLegacySessions(): Promise<Workspace[]> {
-    const rawIndex = await readJson<Record<string, unknown>>(this.paths.sessionsIndexFile);
-    const sessionIds = Array.isArray(rawIndex?.sessionIds)
-      ? rawIndex.sessionIds.filter((id): id is string => typeof id === "string")
-      : [];
-    const activeSessionId = typeof rawIndex?.activeSessionId === "string" ? rawIndex.activeSessionId : null;
-    if (sessionIds.length === 0) return [];
-
-    const migrated: Workspace[] = [];
-    for (const sessionId of sessionIds) {
-      const raw = await readJson<Record<string, unknown>>(
-        resolve(this.paths.sessionsDir, `${encodeURIComponent(sessionId)}.json`),
-      );
-      if (!raw) continue;
-      const workspace = migrateLegacySession(raw, sessionId);
-      if (workspace) migrated.push(workspace);
-    }
-    if (activeSessionId) {
-      migrated.sort((a, b) => {
-        if (a.id === activeSessionId) return -1;
-        if (b.id === activeSessionId) return 1;
-        return 0;
-      });
-    }
-    return migrated;
-  }
 }
 
 function makeWorkspace(args: { label: string; rootPath: string; nowIso: string }): Workspace {
@@ -584,78 +541,6 @@ function summarizeWorkspace(workspace: Workspace): WorkspaceSummary {
   };
 }
 
-function migrateLegacySession(raw: Record<string, unknown>, fallbackId: string): Workspace | null {
-  const nowIso = now();
-  const rootPath = typeof raw.rootPath === "string" ? safeAbsolute(raw.rootPath) : process.cwd();
-  const id = typeof raw.id === "string" ? raw.id : fallbackId;
-  const label = typeof raw.label === "string" && raw.label.trim() ? raw.label : "Migrated Workspace";
-  const panes: PaneState[] = [makeExplorerPane(rootPath, 0, nowIso)];
-  const oldPanels = Array.isArray(raw.openPanels) ? raw.openPanels : [];
-  for (const oldPanel of oldPanels) {
-    if (!oldPanel || typeof oldPanel !== "object") continue;
-    const panel = oldPanel as Record<string, unknown>;
-    const createdAt = typeof panel.createdAt === "string" ? panel.createdAt : nowIso;
-    const updatedAt = typeof panel.updatedAt === "string" ? panel.updatedAt : nowIso;
-    const rect = coerceRect(panel.rect, panes.length);
-    const z = typeof panel.z === "number" ? Math.max(0, Math.trunc(panel.z)) : panes.length;
-    if (panel.kind === "editor" && typeof panel.path === "string") {
-      panes.push({
-        id: typeof panel.id === "string" ? panel.id : makePaneId("editor", panel.path),
-        type: "editor",
-        title: typeof panel.title === "string" ? panel.title : basename(panel.path),
-        filePath: panel.path,
-        draftBody: typeof panel.draftBody === "string" ? panel.draftBody : "",
-        dirty: Boolean(panel.dirty),
-        placement: "floating",
-        rect,
-        z,
-        createdAt,
-        updatedAt,
-      } satisfies EditorPaneState);
-    }
-    if (panel.kind === "terminal" && typeof panel.cwd === "string") {
-      panes.push({
-        id: typeof panel.id === "string" ? panel.id : makePaneId("terminal", panel.cwd),
-        type: "terminal",
-        title: typeof panel.title === "string" ? panel.title : `terminal - ${panel.cwd}`,
-        cwd: panel.cwd,
-        placement: "floating",
-        rect,
-        z,
-        createdAt,
-        updatedAt,
-      } satisfies TerminalPaneState);
-    }
-  }
-
-  return normalizeWorkspace({
-    id,
-    label,
-    rootPath,
-    activeView: "panes",
-    settings: DEFAULT_WORKSPACE_SETTINGS,
-    panes,
-    tiledLayout: layoutForPanes(panes.filter((pane) => pane.placement === "tiled")),
-    canvasViewport: defaultViewport(),
-    activePaneId: panes.at(-1)?.id ?? panes[0]?.id ?? null,
-    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : nowIso,
-    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : nowIso,
-    lastOpenedAt: typeof raw.lastOpenedAt === "string" ? raw.lastOpenedAt : nowIso,
-  });
-}
-
-function coerceRect(value: unknown, index: number): PaneRect {
-  if (!value || typeof value !== "object") return defaultPaneRect(index);
-  const rect = value as Record<string, unknown>;
-  const fallback = defaultPaneRect(index);
-  return {
-    x: typeof rect.x === "number" ? rect.x : fallback.x,
-    y: typeof rect.y === "number" ? rect.y : fallback.y,
-    width: typeof rect.width === "number" && rect.width > 0 ? rect.width : fallback.width,
-    height: typeof rect.height === "number" && rect.height > 0 ? rect.height : fallback.height,
-  };
-}
-
 function browserSessionFor(root: string, workspaceId: string, pane: BrowserPaneState): BrowserSession {
   return {
     workspaceId,
@@ -742,120 +627,5 @@ function parseGitStatus(repoPath: string, output: string): GitStatus {
     behind: Number(behindMatch?.[1] ?? 0),
     clean: files.length === 0,
     files,
-  };
-}
-
-export function makeTerminalPane(cwd: string, panes: PaneState[], placement: PaneState["placement"] = "tiled"): TerminalPaneState {
-  const nowIso = now();
-  return {
-    id: `${makePaneId("terminal", cwd)}:${Date.now().toString(36)}`,
-    type: "terminal",
-    title: `terminal - ${cwd}`,
-    cwd,
-    placement,
-    rect: defaultPaneRect(panes.length),
-    z: panes.length,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-}
-
-export function makeEditorPane(
-  filePath: string,
-  body: string,
-  panes: PaneState[],
-  placement: PaneState["placement"] = "tiled",
-): EditorPaneState {
-  const nowIso = now();
-  return {
-    id: makePaneId("editor", filePath),
-    type: "editor",
-    title: basename(filePath) || filePath,
-    filePath,
-    draftBody: body,
-    dirty: false,
-    placement,
-    rect: defaultPaneRect(panes.length),
-    z: panes.length,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-}
-
-export function makeBrowserPane(
-  url: string,
-  panes: PaneState[],
-  placement: PaneState["placement"] = "tiled",
-): BrowserPaneState {
-  const nowIso = now();
-  const id = `${makePaneId("browser", url || "about:blank")}:${Date.now().toString(36)}`;
-  return {
-    id,
-    type: "browser",
-    title: titleForBrowserUrl(url),
-    url,
-    history: [url],
-    historyIndex: 0,
-    sessionId: `${id}:session`,
-    placement,
-    rect: defaultPaneRect(panes.length),
-    z: panes.length,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-}
-
-export function makeSourceControlPane(
-  repoPath: string | null,
-  panes: PaneState[],
-  placement: PaneState["placement"] = "tiled",
-): SourceControlPaneState {
-  const nowIso = now();
-  return {
-    id: `${makePaneId("sourceControl", repoPath || "workspace")}:${Date.now().toString(36)}`,
-    type: "sourceControl",
-    title: "Source Control",
-    repoPath,
-    placement,
-    rect: defaultPaneRect(panes.length),
-    z: panes.length,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-}
-
-export function makeRepositoriesPane(
-  rootPath: string,
-  panes: PaneState[],
-  placement: PaneState["placement"] = "tiled",
-): RepositoriesPaneState {
-  const nowIso = now();
-  return {
-    id: `${makePaneId("repositories", rootPath)}:${Date.now().toString(36)}`,
-    type: "repositories",
-    title: "Repositories",
-    rootPath,
-    placement,
-    rect: defaultPaneRect(panes.length),
-    z: panes.length,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-}
-
-export function makeSettingsPane(
-  panes: PaneState[],
-  placement: PaneState["placement"] = "tiled",
-): SettingsPaneState {
-  const nowIso = now();
-  return {
-    id: `${makePaneId("settings", "workspace")}:${Date.now().toString(36)}`,
-    type: "settings",
-    title: "Settings",
-    placement,
-    rect: defaultPaneRect(panes.length),
-    z: panes.length,
-    createdAt: nowIso,
-    updatedAt: nowIso,
   };
 }

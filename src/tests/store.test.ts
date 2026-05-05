@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
@@ -58,58 +58,6 @@ test("defaults missing workspace settings during schema parsing", () => {
   });
 
   expect(parsed.settings).toEqual(DEFAULT_WORKSPACE_SETTINGS);
-});
-
-test("migrates legacy sessions to workspaces and discards graph data", async () => {
-  const sessionsDir = join(canvasHome, "sessions");
-  await mkdir(sessionsDir, { recursive: true });
-  await writeFile(
-    join(sessionsDir, "index.json"),
-    JSON.stringify({
-      version: 1,
-      activeSessionId: "legacy",
-      sessionIds: ["legacy"],
-    }),
-  );
-  await writeFile(
-    join(sessionsDir, "legacy.json"),
-    JSON.stringify({
-      id: "legacy",
-      label: "Legacy Canvas",
-      rootPath: process.cwd(),
-      address: process.cwd(),
-      openPanels: [
-        {
-          id: "editor:legacy",
-          kind: "editor",
-          title: "legacy.txt",
-          path: join(process.cwd(), "legacy.txt"),
-          draftBody: "draft",
-          dirty: true,
-          rect: { x: 10, y: 20, width: 500, height: 300 },
-          z: 1,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ],
-      graph: {
-        version: 1,
-        nodes: [{ id: "graph-fs-read-legacy", kind: "fs.read" }],
-        edges: [],
-      },
-      viewport: { x: 0, y: 0, zoom: 1 },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastOpenedAt: new Date().toISOString(),
-    }),
-  );
-
-  const store = new CanvasStore();
-  await store.ensureInitialized();
-  const active = await store.getActiveWorkspace();
-  expect(active.label).toBe("Legacy Canvas");
-  expect(active.panes.some((pane) => pane.type === "editor")).toBe(true);
-  expect("graph" in (active as unknown as Record<string, unknown>)).toBe(false);
 });
 
 test("switches, saves, and closes workspaces", async () => {

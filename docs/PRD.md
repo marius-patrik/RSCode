@@ -32,7 +32,7 @@ Canvas is the dev UI for local workspace, filesystem, terminal, browser, and git
 ## Out Of Scope
 
 - AI provider integration.
-- Agent harness sessions.
+- Agent harness integration.
 - Messaging.
 - Reabsorbing Andromeda.
 

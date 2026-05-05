@@ -1,45 +1,81 @@
-// Native fetch-based client. Replaces the previous tRPC client. Consumer
-// API is preserved for source compatibility:
-//
-//   client.fs.tree.query({ path: "/" })
-//   client.workspace.save.mutate({ workspace })
-//
-// `.query()` and `.mutate()` are aliases — both POST to /api/<path>.
+import type {
+  BrowserSession,
+  FsEntry,
+  GitDiff,
+  GitRepository,
+  GitStatus,
+  RuntimeStatus,
+  Workspace,
+  WorkspaceSummary,
+} from "@/shared/schema";
 
-type Caller = (input?: unknown) => Promise<unknown>;
+type FileKind = "markdown" | "json" | "yaml" | "typescript" | "plain";
 
-function makeBranch(baseUrl: string, path: string[]): unknown {
-  const target: Caller = () => Promise.reject(new Error("invalid call site"));
-  return new Proxy(target, {
-    get(_t, key) {
-      if (typeof key !== "string") return undefined;
-      if (key === "query" || key === "mutate") {
-        return async (input?: unknown) => {
-          const res = await fetch(`${baseUrl}/api/${path.join(".")}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(input ?? null),
-          });
-          const text = await res.text();
-          let parsed: unknown = null;
-          try {
-            parsed = text ? JSON.parse(text) : null;
-          } catch {
-            // surface raw text if JSON parsing fails
-          }
-          if (!res.ok) {
-            const err =
-              parsed && typeof parsed === "object" && "error" in parsed
-                ? String((parsed as { error: unknown }).error)
-                : `${res.status} ${res.statusText}`;
-            throw new Error(`${path.join(".")}: ${err}`);
-          }
-          return parsed;
-        };
-      }
-      return makeBranch(baseUrl, [...path, key]);
-    },
+export type CanvasClient = {
+  health(): Promise<{ ok: true; ts: number }>;
+  runtime: {
+    status(): Promise<RuntimeStatus>;
+    logs(): Promise<{ content: string }>;
+  };
+  fs: {
+    tree(input: { path: string }): Promise<{ entries: FsEntry[] }>;
+    readFile(input: { path: string }): Promise<{ body: string }>;
+    writeFile(input: { path: string; body: string }): Promise<{ ok: true }>;
+    mkdir(input: { path: string }): Promise<{ ok: true }>;
+    createFile(input: { path: string; kind: FileKind }): Promise<{ path: string }>;
+    delete(input: { path: string }): Promise<{ ok: true }>;
+  };
+  workspace: {
+    list(): Promise<{ activeWorkspaceId: string; workspaces: WorkspaceSummary[] }>;
+    active(): Promise<{ workspace: Workspace }>;
+    get(input: { id: string }): Promise<{ workspace: Workspace }>;
+    create(input?: { label?: string; rootPath?: string }): Promise<{ workspace: Workspace }>;
+    save(input: { workspace: Workspace }): Promise<{ workspace: Workspace }>;
+    rename(input: { id: string; label: string }): Promise<{ workspace: Workspace }>;
+    setActive(input: { id: string }): Promise<{ workspace: Workspace }>;
+    close(input: { id: string }): Promise<{ activeWorkspaceId: string; workspaces: WorkspaceSummary[] }>;
+  };
+  git: {
+    repositories(input: { rootPath: string; depth?: number }): Promise<{ repositories: GitRepository[] }>;
+    status(input: { repoPath: string }): Promise<{ status: GitStatus }>;
+    diff(input: { repoPath: string; path?: string }): Promise<{ diff: GitDiff }>;
+  };
+  browser: {
+    session(input: { workspaceId: string; paneId: string }): Promise<{ browser: BrowserSession }>;
+    navigate(input: {
+      workspaceId: string;
+      paneId: string;
+      url: string;
+      replace?: boolean;
+    }): Promise<{ workspace: Workspace; browser: BrowserSession }>;
+  };
+};
+
+async function post<T>(baseUrl: string, path: string, input?: unknown): Promise<T> {
+  const res = await fetch(`${baseUrl}/api/${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input ?? null),
   });
+  const text = await res.text();
+  const parsed = parseResponse(text);
+  if (!res.ok) {
+    const error =
+      parsed && typeof parsed === "object" && "error" in parsed
+        ? String((parsed as { error: unknown }).error)
+        : `${res.status} ${res.statusText}`;
+    throw new Error(`${path}: ${error}`);
+  }
+  return parsed as T;
+}
+
+function parseResponse(text: string): unknown {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 function getBaseUrl() {
@@ -47,15 +83,39 @@ function getBaseUrl() {
   return process.env.CANVAS_URL ?? "http://127.0.0.1:4567";
 }
 
-// Loose typing — the consumer side currently relies on runtime shape rather
-// than static types. Tightening with an `Api` type would require a recursive
-// transform; deferred until a consumer needs the help.
-// biome-ignore lint/suspicious/noExplicitAny: see comment above
-export function makeBrowserClient(): any {
-  return makeBranch(getBaseUrl(), []);
-}
-
-// biome-ignore lint/suspicious/noExplicitAny: see comment above
-export function makeClient(url = getBaseUrl()): any {
-  return makeBranch(url, []);
+export function makeClient(url = getBaseUrl()): CanvasClient {
+  return {
+    health: () => post(url, "health"),
+    runtime: {
+      status: () => post(url, "runtime.status"),
+      logs: () => post(url, "runtime.logs"),
+    },
+    fs: {
+      tree: (input) => post(url, "fs.tree", input),
+      readFile: (input) => post(url, "fs.readFile", input),
+      writeFile: (input) => post(url, "fs.writeFile", input),
+      mkdir: (input) => post(url, "fs.mkdir", input),
+      createFile: (input) => post(url, "fs.createFile", input),
+      delete: (input) => post(url, "fs.delete", input),
+    },
+    workspace: {
+      list: () => post(url, "workspace.list"),
+      active: () => post(url, "workspace.active"),
+      get: (input) => post(url, "workspace.get", input),
+      create: (input = {}) => post(url, "workspace.create", input),
+      save: (input) => post(url, "workspace.save", input),
+      rename: (input) => post(url, "workspace.rename", input),
+      setActive: (input) => post(url, "workspace.setActive", input),
+      close: (input) => post(url, "workspace.close", input),
+    },
+    git: {
+      repositories: (input) => post(url, "git.repositories", input),
+      status: (input) => post(url, "git.status", input),
+      diff: (input) => post(url, "git.diff", input),
+    },
+    browser: {
+      session: (input) => post(url, "browser.session", input),
+      navigate: (input) => post(url, "browser.navigate", input),
+    },
+  };
 }
