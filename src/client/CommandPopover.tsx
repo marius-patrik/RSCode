@@ -48,7 +48,7 @@ export function CommandPopover({ query, groups, highlight, onHighlightChange, on
   return (
     <div
       data-context-menu
-      className="pointer-events-auto absolute bottom-full left-0 right-0 mb-2 flex max-h-[420px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
+      className="pointer-events-auto absolute bottom-full right-2 mb-2 flex max-h-[420px] w-[min(720px,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
     >
       <div className="flex-1 overflow-y-auto py-1">
         {visible.length === 0 ? (

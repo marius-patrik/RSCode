@@ -1,4 +1,4 @@
-import type { ActionGroup } from "@/client/ActionsMenu";
+import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
 import { Canvas, type FsEntry } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
@@ -27,8 +27,9 @@ type AppModal =
       onConfirm: () => void;
     };
 
-type LauncherFileSearch = { id: number; query: string };
 type LauncherBrowserRequest = { id: number; url: string };
+type LauncherPaneRequest = { id: number; kind: "file" | "folder"; path: string };
+type LauncherTerminalRequest = { id: number; input: string };
 
 export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMountProps) {
   const client = useMemo(() => makeClient(baseUrl), [baseUrl]);
@@ -40,8 +41,9 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   const [gitStatuses, setGitStatuses] = useState<Map<string, GitStatus>>(() => new Map());
   const [commandGroups, setCommandGroups] = useState<ActionGroup[]>([]);
   const [commandQuery, setCommandQuery] = useState("");
-  const [launcherFileSearch, setLauncherFileSearch] = useState<LauncherFileSearch | null>(null);
   const [launcherBrowserRequest, setLauncherBrowserRequest] = useState<LauncherBrowserRequest | null>(null);
+  const [launcherPaneRequest, setLauncherPaneRequest] = useState<LauncherPaneRequest | null>(null);
+  const [launcherTerminalRequest, setLauncherTerminalRequest] = useState<LauncherTerminalRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<AppModal | null>(null);
@@ -50,6 +52,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     return window.localStorage.getItem("canvas-theme") !== "light";
   });
   const activeTheme = activeWorkspace?.settings?.theme ?? DEFAULT_WORKSPACE_SETTINGS.theme;
+  const activeAccent = activeWorkspace?.settings?.accentColor ?? DEFAULT_WORKSPACE_SETTINGS.accentColor;
 
   useEffect(() => {
     if (!activeTheme) return;
@@ -61,6 +64,10 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     document.documentElement.dataset.theme = darkMode ? "dark" : "light";
     window.localStorage.setItem("canvas-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = activeAccent;
+  }, [activeAccent]);
 
   const refreshWorkspaces = useCallback(async () => {
     const result = (await client.workspace.list.query()) as {
@@ -323,32 +330,31 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
     [client, workspaces],
   );
 
-  const onCommandSubmit = useCallback(
-    (idx: number, filter = commandQuery) => {
-      const filterText = filter.trim().toLowerCase();
-      const flat: Array<{ run: () => void; disabled: boolean }> = [];
-      for (const group of commandGroups) {
-        for (const item of group.items) {
-          if (!filterText || subseq(filterText, `${group.label} ${item.label} ${item.hint ?? ""}`)) {
-            flat.push({ run: item.onSelect, disabled: Boolean(item.disabledReason) });
-          }
-        }
-      }
-      const picked = flat[idx];
-      if (picked && !picked.disabled) picked.run();
-    },
-    [commandGroups, commandQuery],
-  );
-
-  const onFileSearchSubmit = useCallback((query: string) => {
-    setLauncherFileSearch((current) => ({ id: (current?.id ?? 0) + 1, query }));
-  }, []);
-
   const onWebSubmit = useCallback((query: string) => {
     const url = urlForLauncherQuery(query);
     if (!url) return;
     setLauncherBrowserRequest((current) => ({ id: (current?.id ?? 0) + 1, url }));
   }, []);
+
+  const onTerminalSubmit = useCallback((input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    setLauncherTerminalRequest((current) => ({ id: (current?.id ?? 0) + 1, input: trimmed }));
+  }, []);
+
+  const launcherGroups = useMemo(
+    () =>
+      buildLauncherGroups({
+        query: commandQuery,
+        workspace: activeWorkspace,
+        fileTrees,
+        onOpenFile: (path) => setLauncherPaneRequest((current) => ({ id: (current?.id ?? 0) + 1, kind: "file", path })),
+        onOpenFolder: (path) =>
+          setLauncherPaneRequest((current) => ({ id: (current?.id ?? 0) + 1, kind: "folder", path })),
+        onSearchWeb: onWebSubmit,
+      }),
+    [activeWorkspace, commandQuery, fileTrees, onWebSubmit],
+  );
 
   const toggleActiveView = useCallback(() => {
     if (!activeWorkspace) return;
@@ -380,10 +386,12 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
               onRequestGitStatus={onRequestGitStatus}
               onRequestGitDiff={onRequestGitDiff}
               onBrowserNavigate={onBrowserNavigate}
-              launcherFileSearch={launcherFileSearch}
-              onLauncherFileSearchHandled={() => setLauncherFileSearch(null)}
               launcherBrowserRequest={launcherBrowserRequest}
               onLauncherBrowserRequestHandled={() => setLauncherBrowserRequest(null)}
+              launcherPaneRequest={launcherPaneRequest}
+              onLauncherPaneRequestHandled={() => setLauncherPaneRequest(null)}
+              launcherTerminalRequest={launcherTerminalRequest}
+              onLauncherTerminalRequestHandled={() => setLauncherTerminalRequest(null)}
             />
           ) : (
             <div className="flex h-full items-center justify-center bg-background font-mono text-sm text-muted-foreground">
@@ -408,9 +416,8 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
         commandQuery={commandQuery}
         onCommandQueryChange={setCommandQuery}
         commandGroups={commandGroups}
-        onCommandSubmit={onCommandSubmit}
-        onFileSearchSubmit={onFileSearchSubmit}
-        onWebSubmit={onWebSubmit}
+        launcherGroups={launcherGroups}
+        onTerminalSubmit={onTerminalSubmit}
       />
 
       {modal ? <AppModalView modal={modal} onClose={() => setModal(null)} /> : null}
@@ -456,7 +463,7 @@ function AppModalView({ modal, onClose }: { modal: AppModal; onClose: () => void
   return (
     <div className="fixed inset-0 z-[85] flex items-center justify-center bg-background/80" data-context-menu>
       <form
-        className="w-[380px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-background p-4 shadow-xl"
+        className="w-[380px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-[var(--panel-bg)] p-4 shadow-xl backdrop-blur-xl"
         onSubmit={(event) => {
           event.preventDefault();
           if (modal.kind === "rename") {
@@ -507,6 +514,71 @@ function summarizeWorkspace(workspace: Workspace): WorkspaceSummary {
     updatedAt: workspace.updatedAt,
     lastOpenedAt: workspace.lastOpenedAt,
   };
+}
+
+function buildLauncherGroups({
+  query,
+  workspace,
+  fileTrees,
+  onOpenFile,
+  onOpenFolder,
+  onSearchWeb,
+}: {
+  query: string;
+  workspace: Workspace | null;
+  fileTrees: Map<string, FsEntry[]>;
+  onOpenFile: (path: string) => void;
+  onOpenFolder: (path: string) => void;
+  onSearchWeb: (query: string) => void;
+}): ActionGroup[] {
+  const trimmed = query.trim();
+  if (!trimmed || trimmed.startsWith("/") || trimmed.startsWith(">")) return [];
+  const groups: ActionGroup[] = [
+    {
+      id: "web",
+      label: "Web",
+      items: [
+        {
+          id: "web.search",
+          label: urlForLauncherQuery(trimmed)?.startsWith("http") ? "Open URL" : "Search Web",
+          hint: urlForLauncherQuery(trimmed) ?? undefined,
+          onSelect: () => onSearchWeb(trimmed),
+        },
+      ],
+    },
+  ];
+  if (!workspace) return groups;
+
+  const fileItems: ActionItem[] = [
+    {
+      id: `path:${trimmed}`,
+      label: `Open ${trimmed}`,
+      hint: joinPath(workspace.rootPath, trimmed),
+      onSelect: () => onOpenFolder(joinPath(workspace.rootPath, trimmed)),
+    },
+  ];
+  for (const entries of fileTrees.values()) {
+    for (const entry of entries) {
+      if (!subseq(trimmed.toLowerCase(), `${entry.name} ${entry.path}`.toLowerCase())) continue;
+      fileItems.push({
+        id: `entry:${entry.path}`,
+        label: entry.name,
+        hint: entry.path,
+        onSelect: () => (entry.kind === "file" ? onOpenFile(entry.path) : onOpenFolder(entry.path)),
+      });
+      if (fileItems.length >= 16) break;
+    }
+    if (fileItems.length >= 16) break;
+  }
+  groups.push({ id: "files", label: "Files", items: fileItems });
+  return groups;
+}
+
+function joinPath(parent: string, name: string): string {
+  const trimmed = name.replace(/^\/+/, "");
+  if (!trimmed) return parent;
+  if (parent === "/" || parent === "") return `/${trimmed}`;
+  return `${parent}/${trimmed}`;
 }
 
 function subseq(query: string, target: string): boolean {

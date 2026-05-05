@@ -7,7 +7,6 @@ import type {
   BrowserPaneState,
   EditorPaneState,
   ExplorerPaneState,
-  FinderResult,
   GitDiff,
   GitRepository,
   GitStatus,
@@ -40,7 +39,6 @@ import {
   RefreshCw,
   Rows2,
   Save,
-  Search,
   Settings,
   Terminal as TerminalIcon,
   X,
@@ -56,7 +54,6 @@ import {
 } from "react";
 
 export type FsEntry = { kind: "dir" | "file"; name: string; path: string };
-type FinderScope = "all" | "files";
 
 type CanvasProps = {
   workspace: Workspace;
@@ -75,10 +72,12 @@ type CanvasProps = {
   onRequestGitStatus: (repoPath: string) => Promise<GitStatus>;
   onRequestGitDiff: (repoPath: string, path: string) => Promise<GitDiff>;
   onBrowserNavigate: (workspaceId: string, paneId: string, url: string) => Promise<void>;
-  launcherFileSearch: { id: number; query: string } | null;
-  onLauncherFileSearchHandled: () => void;
   launcherBrowserRequest: { id: number; url: string } | null;
   onLauncherBrowserRequestHandled: () => void;
+  launcherPaneRequest: { id: number; kind: "file" | "folder"; path: string } | null;
+  onLauncherPaneRequestHandled: () => void;
+  launcherTerminalRequest: { id: number; input: string } | null;
+  onLauncherTerminalRequestHandled: () => void;
 };
 
 type ModalRequest =
@@ -119,10 +118,12 @@ export function Canvas({
   onRequestGitStatus,
   onRequestGitDiff,
   onBrowserNavigate,
-  launcherFileSearch,
-  onLauncherFileSearchHandled,
   launcherBrowserRequest,
   onLauncherBrowserRequestHandled,
+  launcherPaneRequest,
+  onLauncherPaneRequestHandled,
+  launcherTerminalRequest,
+  onLauncherTerminalRequestHandled,
 }: CanvasProps) {
   const workspace = useMemo<Workspace>(
     () => ({
@@ -132,9 +133,6 @@ export function Canvas({
     [incomingWorkspace],
   );
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const [finderOpen, setFinderOpen] = useState(false);
-  const [finderScope, setFinderScope] = useState<FinderScope>("all");
-  const [finderQuery, setFinderQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalRequest | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -244,12 +242,26 @@ export function Canvas({
   }, [launcherBrowserRequest, onLauncherBrowserRequestHandled, openBrowserPane]);
 
   useEffect(() => {
-    if (!launcherFileSearch) return;
-    setFinderQuery(launcherFileSearch.query);
-    setFinderScope("files");
-    setFinderOpen(true);
-    onLauncherFileSearchHandled();
-  }, [launcherFileSearch, onLauncherFileSearchHandled]);
+    if (!launcherPaneRequest) return;
+    if (launcherPaneRequest.kind === "file") void openEditorPane(launcherPaneRequest.path);
+    else addPane(makeExplorerPane(launcherPaneRequest.path, workspace.panes, "tiled"));
+    onLauncherPaneRequestHandled();
+  }, [addPane, launcherPaneRequest, onLauncherPaneRequestHandled, openEditorPane, workspace.panes]);
+
+  useEffect(() => {
+    if (!launcherTerminalRequest) return;
+    const target =
+      workspace.panes.find((pane) => pane.id === workspace.activePaneId && pane.type === "terminal") ??
+      workspace.panes.find((pane) => pane.type === "terminal");
+    if (target?.type === "terminal") {
+      dispatchTerminalInput(target.id, launcherTerminalRequest.input);
+    } else {
+      const pane = makeTerminalPane(workspace.rootPath, workspace.panes, "tiled");
+      addPane(pane);
+      window.setTimeout(() => dispatchTerminalInput(pane.id, launcherTerminalRequest.input), 450);
+    }
+    onLauncherTerminalRequestHandled();
+  }, [addPane, launcherTerminalRequest, onLauncherTerminalRequestHandled, workspace.activePaneId, workspace.panes, workspace.rootPath]);
 
   const openSourceControlPane = useCallback(
     (repoPath: string | null = repositories[0]?.rootPath ?? null, placement: PaneState["placement"] = "tiled") => {
@@ -399,10 +411,6 @@ export function Canvas({
         selectedEntry,
         selectedPath,
         repositories,
-        setFinderOpen: (open) => {
-          if (open) setFinderScope("all");
-          setFinderOpen(open);
-        },
         setModal,
         openExplorerPane,
         openEditorPane,
@@ -499,30 +507,12 @@ export function Canvas({
     onCommandGroupsChange(commandGroups);
   }, [commandGroups, onCommandGroupsChange]);
 
-  const finderResults = useMemo(
-    () =>
-      buildFinderResults({
-        query: finderQuery,
-        scope: finderScope,
-        workspace,
-        fileTrees,
-        repositories,
-        commands,
-      }),
-    [commands, fileTrees, finderQuery, finderScope, repositories, workspace],
-  );
-
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target?.matches("input, textarea, [contenteditable]")) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "/") {
-        e.preventDefault();
-        setFinderScope("all");
-        setFinderOpen(true);
-      } else if (e.key === "Escape") {
-        setFinderOpen(false);
+      if (e.key === "Escape") {
         setMenu(null);
       }
     }
@@ -544,7 +534,8 @@ export function Canvas({
 
   return (
     <div
-      className="relative h-full min-h-0 w-full overflow-hidden bg-background text-foreground"
+      data-background={workspace.settings.backgroundStyle}
+      className="workspace-bg relative h-full min-h-0 w-full overflow-hidden text-foreground"
       onContextMenu={(event) => {
         event.preventDefault();
         setMenu({ x: event.clientX, y: event.clientY });
@@ -637,31 +628,6 @@ export function Canvas({
         />
       )}
 
-      {finderOpen ? (
-        <Finder
-          query={finderQuery}
-          scope={finderScope}
-          results={finderResults}
-          onQueryChange={setFinderQuery}
-          onClose={() => setFinderOpen(false)}
-          onPick={(result) => {
-            setFinderOpen(false);
-            if (result.kind === "command") {
-              commands.find((candidate) => candidate.id === result.id.replace(/^command:/, ""))?.run();
-            } else if (result.kind === "pane") {
-              focusPane(result.id.replace(/^pane:/, ""));
-            } else if (result.kind === "file") {
-              void openEditorPane(result.detail ?? result.label);
-            } else if (result.kind === "folder" || result.kind === "path") {
-              const folderPath = result.detail ?? result.label;
-              addPane(makeExplorerPane(folderPath, workspace.panes, "tiled"));
-            } else if (result.kind === "repository") {
-              openSourceControlPane(result.detail ?? null);
-            }
-          }}
-        />
-      ) : null}
-
       {menu ? (
         <ActionsMenu
           x={menu.x}
@@ -686,7 +652,7 @@ export function Canvas({
 function TiledWorkspace(props: TiledWorkspaceProps) {
   if (!props.layout || props.panes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         Open a pane from the quick bar.
       </div>
     );
@@ -809,8 +775,7 @@ function FreeformLayer({
 
 function CanvasWorkspace({ panes, ...props }: PaneRenderProps & { panes: PaneState[] }) {
   return (
-    <div className="relative h-full overflow-hidden bg-background">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(var(--grid-line)_1px,transparent_1px),linear-gradient(90deg,var(--grid-line)_1px,transparent_1px)] bg-[size:28px_28px]" />
+    <div className="relative h-full overflow-hidden">
       <FreeformLayer panes={panes} placement="canvas" {...props} />
     </div>
   );
@@ -863,7 +828,7 @@ function FreeformPane({
 
   return (
     <section
-      className="pointer-events-auto absolute overflow-hidden rounded-md border border-border bg-background shadow-xl"
+      className="pointer-events-auto absolute overflow-hidden rounded-md border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
       style={{
         left: pane.rect.x,
         top: pane.rect.y,
@@ -957,7 +922,7 @@ function PaneFrame({
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-background",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-[var(--panel-bg)] backdrop-blur-xl",
         active ? "border-ring" : "border-border",
         mode === "tiled" && "h-full",
       )}
@@ -1005,7 +970,7 @@ function PaneFrame({
         </HeaderButton>
       </header>
       {showTabs ? (
-        <div className="flex h-8 shrink-0 items-end gap-1 overflow-x-auto border-b border-border bg-background px-1 pt-1">
+        <div className="flex h-8 shrink-0 items-end gap-1 overflow-x-auto border-b border-border bg-[var(--chrome-bg)] px-1 pt-1">
           {tabs.map((tab) => {
             const selected = tab.id === pane.id;
             return (
@@ -1365,7 +1330,7 @@ function BrowserPane({
       <button
         type="button"
         aria-label="Browser viewport"
-        className="relative min-h-0 flex-1 appearance-none bg-background p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+        className="relative min-h-0 flex-1 appearance-none bg-[var(--panel-bg)] p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
         onMouseDown={(event) => {
           const point = browserFramePoint(event, imageRef.current);
           if (!point) return;
@@ -1396,16 +1361,16 @@ function BrowserPane({
             ref={imageRef}
             src={frame}
             alt={pane.url}
-            className="h-full w-full select-none object-contain bg-background"
+            className="h-full w-full select-none object-contain bg-transparent"
             draggable={false}
           />
         ) : (
-          <div className="flex h-full items-center justify-center bg-background font-mono text-xs text-muted-foreground">
+          <div className="flex h-full items-center justify-center bg-transparent font-mono text-xs text-muted-foreground">
             waiting for frame
           </div>
         )}
         {renderer !== "chromium" ? (
-          <div className="absolute bottom-2 right-2 rounded border border-border bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+          <div className="absolute bottom-2 right-2 rounded border border-border bg-[var(--panel-bg)] px-2 py-1 font-mono text-[10px] text-muted-foreground backdrop-blur-xl">
             {renderer}
           </div>
         ) : null}
@@ -1613,6 +1578,33 @@ function SettingsPane({
             }
           />
           <SettingRow
+            title="Background"
+            detail="Choose the workspace backdrop pattern."
+            control={
+              <SegmentedControl
+                value={settings.backgroundStyle}
+                options={[
+                  { value: "grid", label: "Grid" },
+                  { value: "flat", label: "Flat" },
+                  { value: "dot", label: "Dot" },
+                ]}
+                onChange={(value) =>
+                  onUpdateSettings({ backgroundStyle: value as WorkspaceSettings["backgroundStyle"] })
+                }
+              />
+            }
+          />
+          <SettingRow
+            title="Theme Color"
+            detail="Set the accent used for focus rings and selected controls."
+            control={
+              <ColorSwatches
+                value={settings.accentColor}
+                onChange={(value) => onUpdateSettings({ accentColor: value })}
+              />
+            }
+          />
+          <SettingRow
             title="Tabbed Panes"
             detail="Allow tiled panes to hold multiple tabs."
             control={
@@ -1628,7 +1620,7 @@ function SettingsPane({
               >
                 <span
                   className={cn(
-                    "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-background transition-transform",
+                    "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-[var(--panel-bg)] transition-transform",
                     settings.tabbedPanes ? "translate-x-5" : "translate-x-0.5",
                   )}
                 />
@@ -1637,6 +1629,42 @@ function SettingsPane({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ColorSwatches({
+  value,
+  onChange,
+}: {
+  value: WorkspaceSettings["accentColor"];
+  onChange: (value: WorkspaceSettings["accentColor"]) => void;
+}) {
+  const options: Array<{ value: WorkspaceSettings["accentColor"]; label: string; color: string }> = [
+    { value: "neutral", label: "Neutral", color: "linear-gradient(135deg, #111 0%, #f5f5f5 100%)" },
+    { value: "blue", label: "Blue", color: "#2563eb" },
+    { value: "green", label: "Green", color: "#16a34a" },
+    { value: "amber", label: "Amber", color: "#d97706" },
+    { value: "red", label: "Red", color: "#dc2626" },
+    { value: "violet", label: "Violet", color: "#7c3aed" },
+  ];
+  return (
+    <div className="flex flex-wrap justify-end gap-1.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          title={option.label}
+          aria-label={option.label}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "h-7 w-7 rounded-md border border-border p-0.5 transition-colors hover:border-ring",
+            option.value === value && "border-ring bg-[var(--control-bg)]",
+          )}
+        >
+          <span className="block h-full w-full rounded" style={{ background: option.color }} />
+        </button>
+      ))}
     </div>
   );
 }
@@ -1663,7 +1691,7 @@ function SegmentedControl({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+    <div className="inline-flex rounded-md border border-border bg-[var(--control-bg)] p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -1681,103 +1709,12 @@ function SegmentedControl({
   );
 }
 
-function Finder({
-  query,
-  scope,
-  results,
-  onQueryChange,
-  onPick,
-  onClose,
-}: {
-  query: string;
-  scope: FinderScope;
-  results: FinderResult[];
-  onQueryChange: (query: string) => void;
-  onPick: (result: FinderResult) => void;
-  onClose: () => void;
-}) {
-  const [highlight, setHighlight] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (highlight >= results.length) setHighlight(0);
-  }, [highlight, results.length]);
-
-  return (
-    <div className="fixed inset-0 z-[70] bg-background/80" data-context-menu>
-      <div className="absolute left-1/2 top-20 flex w-[680px] max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-md border border-border bg-background shadow-xl">
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(event) => {
-              onQueryChange(event.target.value);
-              setHighlight(0);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setHighlight((current) => (results.length === 0 ? 0 : (current + 1) % results.length));
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setHighlight((current) => (results.length === 0 ? 0 : (current - 1 + results.length) % results.length));
-              } else if (event.key === "Enter") {
-                event.preventDefault();
-                const result = results[highlight];
-                if (result) onPick(result);
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                onClose();
-              }
-            }}
-            placeholder={scope === "files" ? "Find files and folders" : "Find files, panes, repositories, commands, or jump to /absolute/path"}
-            className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground/45"
-          />
-        </div>
-        <div className="max-h-[440px] overflow-y-auto py-1">
-          {results.length === 0 ? (
-            <div className="px-4 py-5 text-sm text-muted-foreground">No matches</div>
-          ) : (
-            results.map((result, index) => (
-              <button
-                type="button"
-                key={result.id}
-                onMouseEnter={() => setHighlight(index)}
-                onClick={() => onPick(result)}
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm",
-                  index === highlight && "bg-secondary",
-                )}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate">{result.label}</span>
-                  {result.detail ? (
-                    <span className="block truncate font-mono text-[10px] text-muted-foreground/60">{result.detail}</span>
-                  ) : null}
-                </span>
-                <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
-                  {result.kind}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function NativeModal({ request, onClose }: { request: ModalRequest; onClose: () => void }) {
   const [value, setValue] = useState(request.kind === "prompt" ? request.defaultValue : "");
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/80" data-context-menu>
       <form
-        className="w-[420px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-background p-4 shadow-xl"
+        className="w-[420px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-[var(--panel-bg)] p-4 shadow-xl backdrop-blur-xl"
         onSubmit={(event) => {
           event.preventDefault();
           if (request.kind === "prompt") {
@@ -1830,7 +1767,6 @@ function createWorkspaceCommands(args: {
   selectedEntry: FsEntry | null;
   selectedPath: string | null;
   repositories: GitRepository[];
-  setFinderOpen: (open: boolean) => void;
   setModal: (modal: ModalRequest) => void;
   openExplorerPane: () => void;
   openEditorPane: (path: string, placement?: PaneState["placement"]) => Promise<void>;
@@ -1858,15 +1794,6 @@ function createWorkspaceCommands(args: {
       : selectedPath
     : args.workspace.rootPath;
   return [
-    {
-      id: "finder.open",
-      label: "Open Finder",
-      scope: "navigation",
-      group: "navigation",
-      hint: "/",
-      enabled,
-      run: () => args.setFinderOpen(true),
-    },
     {
       id: "workspace.view.panes",
       label: "Show Panes",
@@ -2049,68 +1976,6 @@ function createWorkspaceCommands(args: {
       },
     },
   ];
-}
-
-function buildFinderResults(args: {
-  query: string;
-  scope: FinderScope;
-  workspace: Workspace;
-  fileTrees: Map<string, FsEntry[]>;
-  repositories: GitRepository[];
-  commands: CommandDefinition[];
-}): FinderResult[] {
-  const query = args.query.trim();
-  const results: FinderResult[] = [];
-  for (const entries of args.fileTrees.values()) {
-    for (const entry of entries) {
-      results.push({
-        id: `entry:${entry.path}`,
-        label: entry.name,
-        detail: entry.path,
-        kind: entry.kind === "dir" ? "folder" : "file",
-      });
-    }
-  }
-  if (args.scope === "all") {
-    for (const pane of args.workspace.panes) {
-      results.push({
-        id: `pane:${pane.id}`,
-        label: pane.title,
-        detail: detailForPane(pane),
-        kind: "pane",
-      });
-    }
-    for (const repo of args.repositories) {
-      results.push({
-        id: `repository:${repo.rootPath}`,
-        label: repo.name,
-        detail: repo.rootPath,
-        kind: "repository",
-      });
-    }
-    for (const command of args.commands) {
-      if (!command.enabled().enabled) continue;
-      results.push({
-        id: `command:${command.id}`,
-        label: command.label,
-        detail: command.hint,
-        kind: "command",
-      });
-    }
-  }
-  if (query && (args.scope === "files" || query.startsWith("/"))) {
-    const path = query.startsWith("/") ? query : joinPath(args.workspace.rootPath, query);
-    results.unshift({
-      id: `path:${path}`,
-      label: query,
-      detail: path,
-      kind: "path",
-    });
-  }
-  if (!query) return results.slice(0, 80);
-  return results
-    .filter((result) => matches(query.toLowerCase(), `${result.kind} ${result.label} ${result.detail ?? ""}`))
-    .slice(0, 80);
 }
 
 function paneIcon(type: PaneType, className: string) {

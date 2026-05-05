@@ -140,12 +140,16 @@ export const tiledLayoutNodeSchema: z.ZodType<TiledLayoutNode> = z.lazy(() =>
 export const workspaceSettingsSchema = z.object({
   theme: z.enum(["dark", "light"]).default("dark"),
   defaultView: z.enum(["panes", "canvas"]).default("panes"),
+  backgroundStyle: z.enum(["grid", "flat", "dot"]).default("grid"),
+  accentColor: z.enum(["neutral", "blue", "green", "amber", "red", "violet"]).default("neutral"),
   tabbedPanes: z.boolean().default(true),
 });
 
 export const DEFAULT_WORKSPACE_SETTINGS = {
   theme: "dark",
   defaultView: "panes",
+  backgroundStyle: "grid",
+  accentColor: "neutral",
   tabbedPanes: true,
 } as const;
 
@@ -220,13 +224,6 @@ export const browserSessionSchema = z.object({
   profilePath: z.string(),
 });
 
-export const finderResultSchema = z.object({
-  id: z.string().trim().min(1),
-  label: z.string().trim().min(1),
-  detail: z.string().optional(),
-  kind: z.enum(["file", "folder", "pane", "workspace", "repository", "command", "path"]),
-});
-
 export type FsEntry = z.infer<typeof fsEntrySchema>;
 export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;
 export type ViewportState = z.infer<typeof viewportStateSchema>;
@@ -250,7 +247,6 @@ export type GitChangedFile = z.infer<typeof gitChangedFileSchema>;
 export type GitStatus = z.infer<typeof gitStatusSchema>;
 export type GitDiff = z.infer<typeof gitDiffSchema>;
 export type BrowserSession = z.infer<typeof browserSessionSchema>;
-export type FinderResult = z.infer<typeof finderResultSchema>;
 
 export function defaultViewport(): ViewportState {
   return { x: 0, y: 0, zoom: 1 };

@@ -12,7 +12,6 @@ import {
   Grid2X2,
   Pencil,
   Plus,
-  RefreshCw,
   Settings,
   Terminal,
   X,
@@ -32,9 +31,8 @@ type DockProps = {
   commandQuery: string;
   onCommandQueryChange: (next: string) => void;
   commandGroups: ActionGroup[];
-  onCommandSubmit: (idx: number, filter?: string) => void;
-  onFileSearchSubmit: (query: string) => void;
-  onWebSubmit: (query: string) => void;
+  launcherGroups: ActionGroup[];
+  onTerminalSubmit: (input: string) => void;
   onCommandFocus?: () => void;
   onCommandBlur?: () => void;
 };
@@ -52,9 +50,8 @@ export function Dock({
   commandQuery,
   onCommandQueryChange,
   commandGroups,
-  onCommandSubmit,
-  onFileSearchSubmit,
-  onWebSubmit,
+  launcherGroups,
+  onTerminalSubmit,
   onCommandFocus,
   onCommandBlur,
 }: DockProps) {
@@ -78,36 +75,34 @@ export function Dock({
 
   const trimmedQuery = commandQuery.trim();
   const prefixedQuery = commandQuery.trimStart();
-  const launcherMode = prefixedQuery.startsWith(">") ? "commands" : prefixedQuery.startsWith("/") ? "files" : "web";
-  const commandFilter = launcherMode === "commands" ? prefixedQuery.slice(1).trimStart() : "";
-  const popoverOpen = focused && launcherMode === "commands";
-  const visibleCount = popoverOpen ? flattenGroups(commandFilter, commandGroups).length : 0;
+  const launcherMode = prefixedQuery.startsWith("/") ? "commands" : prefixedQuery.startsWith(">") ? "terminal" : "search";
+  const launcherFilter =
+    launcherMode === "commands" || launcherMode === "terminal" ? prefixedQuery.slice(1).trimStart() : trimmedQuery;
+  const activeGroups = launcherMode === "commands" ? commandGroups : launcherMode === "search" ? launcherGroups : [];
+  const popoverOpen = focused && launcherMode !== "terminal" && (launcherMode === "commands" || launcherFilter.length > 0);
+  const visibleItems = popoverOpen ? flattenGroups(launcherFilter, activeGroups) : [];
+  const visibleCount = visibleItems.length;
   const commandById = useMemo(() => indexCommands(commandGroups), [commandGroups]);
   const quickActions = [
-    { id: "workspace.refresh", title: "Refresh workspace", icon: RefreshCw },
     { id: "pane.open.explorer", title: "Explorer", icon: Folder },
     { id: "pane.open.terminal", title: "Terminal", icon: Terminal },
     { id: "pane.open.browser", title: "Browser", icon: Globe2 },
     { id: "pane.open.repositories", title: "Repositories", icon: FolderGit2 },
     { id: "pane.open.source-control", title: "Source Control", icon: GitBranch },
-    { id: "pane.open.settings", title: "Settings", icon: Settings },
   ] as const;
 
   function submitTop() {
     if (!trimmedQuery) return;
-    if (launcherMode === "files") {
-      onFileSearchSubmit(prefixedQuery.slice(1).trimStart());
-      clearInput();
-      return;
-    }
-    if (launcherMode === "web") {
-      onWebSubmit(trimmedQuery);
+    if (launcherMode === "terminal") {
+      onTerminalSubmit(launcherFilter);
       clearInput();
       return;
     }
     if (visibleCount === 0) return;
     const idx = highlight < visibleCount ? highlight : 0;
-    onCommandSubmit(idx, commandFilter);
+    const item = visibleItems[idx]?.item;
+    if (!item || item.disabledReason) return;
+    item.onSelect();
     clearInput();
   }
 
@@ -124,22 +119,24 @@ export function Dock({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background text-foreground">
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-[var(--dock-bg)] text-foreground backdrop-blur-xl">
       <div className="relative mx-auto flex h-12 max-w-screen-2xl items-center gap-2 px-2">
         {popoverOpen ? (
           <CommandPopover
-            query={commandFilter}
-            groups={commandGroups}
+            query={launcherFilter}
+            groups={activeGroups}
             highlight={highlight}
             onHighlightChange={setHighlight}
             onPick={(idx) => {
-              onCommandSubmit(idx, commandFilter);
+              const item = visibleItems[idx]?.item;
+              if (!item || item.disabledReason) return;
+              item.onSelect();
               clearInput();
             }}
           />
         ) : null}
 
-        <div className="flex min-w-0 max-w-[34vw] items-center gap-1 overflow-x-auto">
+        <div className="mr-auto flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {workspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
             return (
@@ -147,7 +144,7 @@ export function Dock({
                 key={workspace.id}
                 className={cn(
                   "group flex h-8 max-w-[170px] shrink-0 items-center gap-1 rounded-md border px-1",
-                  active ? "border-ring bg-secondary text-foreground" : "border-transparent text-muted-foreground",
+                  active ? "border-ring bg-[var(--control-bg)] text-foreground" : "border-transparent text-muted-foreground",
                 )}
               >
                 <button
@@ -179,9 +176,6 @@ export function Dock({
         </div>
 
         <div className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
-          <DockIconButton title={activeView === "panes" ? "Switch to canvas" : "Switch to panes"} onClick={onToggleView} active>
-            {activeView === "panes" ? <Grid2X2 className="h-4 w-4" /> : <Columns2 className="h-4 w-4" />}
-          </DockIconButton>
           {quickActions.map((action) => {
             const item = commandById.get(action.id);
             const Icon = action.icon;
@@ -215,12 +209,12 @@ export function Dock({
           }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
-              if (launcherMode !== "commands") return;
+              if (launcherMode === "terminal") return;
               if (visibleCount === 0) return;
               e.preventDefault();
               setHighlight((h) => (h + 1) % visibleCount);
             } else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
-              if (launcherMode !== "commands") return;
+              if (launcherMode === "terminal") return;
               if (visibleCount === 0) return;
               e.preventDefault();
               setHighlight((h) => (h - 1 + visibleCount) % visibleCount);
@@ -234,10 +228,18 @@ export function Dock({
               inputRef.current?.blur();
             }
           }}
-          placeholder="Type message or URL to search web, / files, > commands"
+          placeholder="Search files or web, / commands, > terminal"
           spellCheck={false}
-          className="min-w-[180px] flex-1 rounded-md border border-border bg-secondary px-3 py-1.5 font-mono text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="w-[min(42vw,560px)] min-w-[240px] flex-none rounded-md border border-border bg-[var(--input-bg)] px-3 py-1.5 font-mono text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
+        <div className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
+          <DockIconButton title={activeView === "panes" ? "Switch to canvas" : "Switch to panes"} onClick={onToggleView} active>
+            {activeView === "panes" ? <Grid2X2 className="h-4 w-4" /> : <Columns2 className="h-4 w-4" />}
+          </DockIconButton>
+          <DockIconButton title={commandById.get("pane.open.settings")?.disabledReason ?? "Settings"} onClick={() => runAction("pane.open.settings")}>
+            <Settings className="h-4 w-4" />
+          </DockIconButton>
+        </div>
       </div>
     </div>
   );
@@ -266,9 +268,9 @@ function DockIconButton({
       disabled={disabled}
       className={cn(
         "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-35",
-        "hover:border-border hover:bg-secondary hover:text-foreground",
-        active && "border-ring bg-secondary text-foreground",
-        prominent && "border-border bg-secondary text-foreground",
+        "hover:border-border hover:bg-[var(--control-bg)] hover:text-foreground",
+        active && "border-ring bg-[var(--control-bg)] text-foreground",
+        prominent && "border-border bg-[var(--control-bg)] text-foreground",
       )}
     >
       {children}

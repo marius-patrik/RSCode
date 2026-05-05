@@ -94,7 +94,7 @@ export function ActionsMenu({
     <div
       data-context-menu
       style={{ left, top }}
-      className="fixed z-50 flex w-[280px] max-h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
+      className="fixed z-50 flex w-[280px] max-h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-1.5 border-b border-border bg-secondary px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">
