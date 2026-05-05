@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import type { BrowserSession } from "@/shared/schema";
-import { chromium, type BrowserContext, type Page } from "playwright-chromium";
+import { type BrowserContext, type Page, chromium } from "playwright-chromium";
 
 type BrowserRenderer = "chromium" | "fallback";
 
@@ -84,12 +84,10 @@ export class BrowserFrameService {
 
   async stateFor(session: BrowserSession): Promise<BrowserStateMessage> {
     await mkdir(resolve(this.profilesRoot, encodeURIComponent(session.workspaceId)), { recursive: true });
-    const live = await this.tryLiveBrowser(session);
-    const title = live ? await safePageTitle(live.page, session.title) : session.title;
     return {
       type: "state",
-      browser: { ...session, title },
-      renderer: live ? "chromium" : "fallback",
+      browser: session,
+      renderer: this.renderer(),
     };
   }
 
@@ -124,16 +122,6 @@ export class BrowserFrameService {
     );
   }
 
-  private async tryLiveBrowser(session: BrowserSession): Promise<LiveBrowser | null> {
-    if (!this.executablePath) return null;
-    try {
-      return await this.liveBrowserFor(session);
-    } catch (error) {
-      await this.log(`browser chromium launch failed: ${error instanceof Error ? error.message : String(error)}`);
-      return null;
-    }
-  }
-
   private async liveBrowserFor(session: BrowserSession): Promise<LiveBrowser> {
     const key = session.profilePath;
     let pending = this.liveBrowsers.get(key);
@@ -149,8 +137,10 @@ export class BrowserFrameService {
 
   private async createLiveBrowser(session: BrowserSession): Promise<LiveBrowser> {
     if (!this.executablePath) throw new Error("Chromium executable not configured");
-    await mkdir(session.profilePath, { recursive: true });
-    const context = await chromium.launchPersistentContext(session.profilePath, {
+    const userDataDir = join(session.profilePath, "chromium");
+    await mkdir(userDataDir, { recursive: true });
+    await clearChromiumSingletonFiles(userDataDir);
+    const context = await chromium.launchPersistentContext(userDataDir, {
       executablePath: this.executablePath,
       headless: true,
       viewport: VIEWPORT,
@@ -236,10 +226,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-async function safePageTitle(page: Page, fallback: string): Promise<string> {
-  try {
-    return (await page.title()) || fallback;
-  } catch {
-    return fallback;
-  }
+async function clearChromiumSingletonFiles(profilePath: string): Promise<void> {
+  await Promise.all(
+    ["SingletonCookie", "SingletonLock", "SingletonSocket"].map((name) =>
+      rm(join(profilePath, name), { force: true, recursive: true }),
+    ),
+  );
 }

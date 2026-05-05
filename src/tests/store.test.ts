@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
 import type { AppContext } from "@/server/api";
-import type { Workspace } from "@/shared/schema";
 import { CanvasStore } from "@/server/store";
+import type { Workspace } from "@/shared/schema";
 
 let canvasHome = "";
 

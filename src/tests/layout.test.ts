@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DEFAULT_FOLDER_LIMIT, layoutVisibleTree } from "@/server/layout";
+import { DEFAULT_FOLDER_LIMIT, layoutVisibleTree } from "@/client/layout";
 import type { FsEntry } from "@/shared/schema";
 
 test("large expanded folders are capped and get a load-more node", () => {

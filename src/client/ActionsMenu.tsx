@@ -149,8 +149,8 @@ export function ActionsMenu({
                     title={it.disabledReason ?? it.hint}
                     className={cn(
                       "flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-[13px] transition-colors focus-visible:outline-none",
-                      active ? "bg-white/[0.10]" : "",
-                      it.destructive ? "text-rose-300" : "text-foreground",
+                      active ? "bg-surface-hover" : "",
+                      "text-foreground",
                       it.disabledReason && "cursor-not-allowed opacity-45",
                     )}
                   >

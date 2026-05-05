@@ -1,4 +1,3 @@
-import { workspaceSchema } from "@/shared/schema";
 import {
   createFsFile,
   deleteFsEntry,
@@ -8,6 +7,7 @@ import {
   writeFsFile,
 } from "@/server/store";
 import type { CanvasStore } from "@/server/store";
+import { workspaceSchema } from "@/shared/schema";
 import { z } from "zod";
 
 export type AppContext = { store: CanvasStore };

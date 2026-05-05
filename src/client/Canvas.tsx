@@ -1,7 +1,7 @@
 import { type ActionGroup, ActionsMenu } from "@/client/ActionsMenu";
 import { MonacoEditor, languageForFile } from "@/client/MonacoEditor";
 import { TerminalNodeView } from "@/client/TerminalNode";
-import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/server/commands";
+import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/client/commands";
 import type {
   BrowserPaneState,
   EditorPaneState,
@@ -1066,7 +1066,7 @@ function TreeBranch({
               {entry.kind === "dir" ? (
                 <Folder className="h-3.5 w-3.5 shrink-0" />
               ) : (
-                <FileText className="h-3.5 w-3.5 shrink-0 text-slate-300" />
+                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               )}
               <span className="truncate">{entry.name}</span>
             </button>
@@ -1205,9 +1205,10 @@ function BrowserPane({
           <ChevronRight className="h-4 w-4" />
         </button>
       </form>
-      <div
-        tabIndex={0}
-        className="relative min-h-0 flex-1 bg-background outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+      <button
+        type="button"
+        aria-label="Browser viewport"
+        className="relative min-h-0 flex-1 appearance-none bg-background p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
         onMouseDown={(event) => {
           const point = browserFramePoint(event, imageRef.current);
           if (!point) return;
@@ -1251,7 +1252,7 @@ function BrowserPane({
             {renderer}
           </div>
         ) : null}
-      </div>
+      </button>
     </div>
   );
 }
@@ -1346,7 +1347,7 @@ function SourceControlPane({
             </button>
           ))}
         </div>
-        <pre className="min-h-0 overflow-auto p-3 text-[11px] leading-relaxed text-slate-200">
+        <pre className="min-h-0 overflow-auto p-3 text-[11px] leading-relaxed text-foreground">
           {selectedFile ? diff || "No diff for selected file." : "Select a changed file to preview a readonly diff."}
         </pre>
       </div>

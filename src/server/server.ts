@@ -1,10 +1,10 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type AppContext, lookupHandler } from "@/server/api";
-import { type BrowserInteractionMessage, BrowserFrameService } from "@/server/browserService";
-import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
+import { BrowserFrameService, type BrowserInteractionMessage } from "@/server/browserService";
 import { serveWebAsset } from "@/server/static";
 import { CanvasStore } from "@/server/store";
+import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
