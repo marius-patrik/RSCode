@@ -1,11 +1,7 @@
 import type { ActionGroup } from "@/client/ActionsMenu";
+import { matchesSubsequence } from "@/client/search";
 import { cn } from "@/shared/utils";
 import { useEffect, useMemo } from "react";
-
-// Action popover anchored to the dock command input. Mirrors
-// ActionsMenu's filtering / grouping but renders **upward** from the
-// input (the dock sits at the bottom of the screen) and owns no input
-// itself — the dock's <input> drives `query` and Enter submission.
 
 export type CommandPopoverProps = {
   query: string;
@@ -17,10 +13,10 @@ export type CommandPopoverProps = {
 
 export function flattenGroups(query: string, groups: ActionGroup[]): Array<{ group: ActionGroup["id"]; itemIdx: number; group_label: string; item: ActionGroup["items"][number] }> {
   const filterText = query.trim().toLowerCase();
-  const flat: Array<{ group: ActionGroup["id"]; itemIdx: number; group_label: string; item: ActionGroup["items"][number] }> = [];
+    const flat: Array<{ group: ActionGroup["id"]; itemIdx: number; group_label: string; item: ActionGroup["items"][number] }> = [];
   for (const g of groups) {
     for (const it of g.items) {
-      if (!filterText || matches(filterText, `${g.label} ${it.label} ${it.hint ?? ""}`)) {
+      if (!filterText || matchesSubsequence(filterText, `${g.label} ${it.label} ${it.hint ?? ""}`)) {
         flat.push({ group: g.id, itemIdx: flat.length, group_label: g.label, item: it });
       }
     }
@@ -99,17 +95,4 @@ export function CommandPopover({ query, groups, highlight, onHighlightChange, on
       </div>
     </div>
   );
-}
-
-// Subsequence matcher — every char of query appears in target in order.
-// Same as ActionsMenu's; copied so this file stays standalone.
-function matches(query: string, target: string): boolean {
-  const t = target.toLowerCase();
-  let i = 0;
-  for (const ch of query) {
-    const found = t.indexOf(ch, i);
-    if (found === -1) return false;
-    i = found + 1;
-  }
-  return true;
 }

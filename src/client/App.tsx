@@ -3,6 +3,7 @@ import { Canvas } from "@/client/Canvas";
 import { Dock } from "@/client/Dock";
 import { makeClient } from "@/client/client";
 import { urlForLauncherQuery } from "@/client/launcher";
+import { matchesSubsequence } from "@/client/search";
 import { applyWorkspaceTheme, resolveWorkspaceTheme } from "@/client/theme";
 import type { FsEntry, GitRepository, GitStatus, Workspace, WorkspaceSummary } from "@/shared/schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -172,8 +173,34 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   );
 
   const onBrowserNavigate = useCallback(
-    async (workspaceId: string, paneId: string, url: string) => {
-      const result = await client.browser.navigate({ workspaceId, paneId, url });
+    async (workspaceId: string, paneId: string, url: string, replace?: boolean) => {
+      const result = await client.browser.navigate({ workspaceId, paneId, url, replace });
+      setActiveWorkspace((current) =>
+        current?.id === result.workspace.id ? workspaceForCurrentView(result.workspace, current) : current,
+      );
+      setWorkspaces((prev) =>
+        prev.map((workspace) => (workspace.id === result.workspace.id ? summarizeWorkspace(result.workspace) : workspace)),
+      );
+    },
+    [client],
+  );
+
+  const onBrowserHistory = useCallback(
+    async (workspaceId: string, paneId: string, direction: "back" | "forward") => {
+      const result = await client.browser.history({ workspaceId, paneId, direction });
+      setActiveWorkspace((current) =>
+        current?.id === result.workspace.id ? workspaceForCurrentView(result.workspace, current) : current,
+      );
+      setWorkspaces((prev) =>
+        prev.map((workspace) => (workspace.id === result.workspace.id ? summarizeWorkspace(result.workspace) : workspace)),
+      );
+    },
+    [client],
+  );
+
+  const onBrowserSync = useCallback(
+    async (workspaceId: string) => {
+      const result = await client.workspace.get({ id: workspaceId });
       setActiveWorkspace((current) =>
         current?.id === result.workspace.id ? workspaceForCurrentView(result.workspace, current) : current,
       );
@@ -372,6 +399,8 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
               onRequestGitStatus={onRequestGitStatus}
               onRequestGitDiff={onRequestGitDiff}
               onBrowserNavigate={onBrowserNavigate}
+              onBrowserHistory={onBrowserHistory}
+              onBrowserSync={onBrowserSync}
               launcherBrowserRequest={launcherBrowserRequest}
               onLauncherBrowserRequestHandled={() => setLauncherBrowserRequest(null)}
               launcherPaneRequest={launcherPaneRequest}
@@ -536,7 +565,7 @@ function buildLauncherGroups({
   ];
   for (const entries of fileTrees.values()) {
     for (const entry of entries) {
-      if (!subseq(trimmed.toLowerCase(), `${entry.name} ${entry.path}`.toLowerCase())) continue;
+      if (!matchesSubsequence(trimmed, `${entry.name} ${entry.path}`)) continue;
       fileItems.push({
         id: `entry:${entry.path}`,
         label: entry.name,
@@ -556,15 +585,4 @@ function joinPath(parent: string, name: string): string {
   if (!trimmed) return parent;
   if (parent === "/" || parent === "") return `/${trimmed}`;
   return `${parent}/${trimmed}`;
-}
-
-function subseq(query: string, target: string): boolean {
-  const text = target.toLowerCase();
-  let i = 0;
-  for (const ch of query) {
-    const found = text.indexOf(ch, i);
-    if (found === -1) return false;
-    i = found + 1;
-  }
-  return true;
 }

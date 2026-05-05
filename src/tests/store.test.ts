@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
 import type { AppContext } from "@/server/api";
 import { CanvasStore } from "@/server/store";
-import { DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace } from "@/shared/schema";
+import { INTERNAL_BLANK_BROWSER_URL } from "@/shared/browser";
+import { type BrowserPaneState, DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace } from "@/shared/schema";
 
 let canvasHome = "";
 
@@ -235,23 +236,137 @@ test("discovers git repositories and returns readonly status and diff", async ()
 test("browser sessions persist pane navigation state", async () => {
   const store = new CanvasStore();
   await store.ensureInitialized();
+  const { workspace, browserPane } = await saveWorkspaceWithBrowserPane(store);
+
+  const navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "data:text/html,<h1>Canvas</h1>",
+  });
+  expect(navigated.browser.url).toContain("data:text/html");
+  expect(navigated.browser.profilePath).toContain(encodeURIComponent(workspace.id));
+});
+
+test("browser navigation supports push, replace, history bounds, and blank normalization", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const { workspace, browserPane } = await saveWorkspaceWithBrowserPane(store);
+
+  await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/one",
+  });
+  let navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/two",
+  });
+  let pane = browserPaneFrom(navigated.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/two");
+  expect(pane.history).toEqual(["about:blank", "https://example.com/one", "https://example.com/two"]);
+  expect(pane.historyIndex).toBe(2);
+  expect(navigated.browser.canGoBack).toBe(true);
+  expect(navigated.browser.canGoForward).toBe(false);
+
+  const back = await store.moveBrowserHistory({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "back",
+  });
+  pane = browserPaneFrom(back.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/one");
+  expect(pane.historyIndex).toBe(1);
+  expect(back.browser.canGoBack).toBe(true);
+  expect(back.browser.canGoForward).toBe(true);
+
+  const replaced = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/replaced",
+    replace: true,
+  });
+  pane = browserPaneFrom(replaced.workspace, browserPane.id);
+  expect(pane.history).toEqual(["about:blank", "https://example.com/replaced", "https://example.com/two"]);
+  expect(pane.historyIndex).toBe(1);
+
+  const forward = await store.moveBrowserHistory({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "forward",
+  });
+  pane = browserPaneFrom(forward.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/two");
+  expect(pane.historyIndex).toBe(2);
+
+  const boundary = await store.moveBrowserHistory({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "forward",
+  });
+  pane = browserPaneFrom(boundary.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/two");
+  expect(pane.historyIndex).toBe(2);
+
+  navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: INTERNAL_BLANK_BROWSER_URL,
+  });
+  pane = browserPaneFrom(navigated.workspace, browserPane.id);
+  expect(pane.url).toBe("about:blank");
+  expect(pane.history.at(-1)).toBe("about:blank");
+});
+
+test("browser history API moves persisted pane history", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const ctx: AppContext = { store };
+  const { workspace, browserPane } = await saveWorkspaceWithBrowserPane(store);
+  await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/one",
+  });
+  await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/two",
+  });
+
+  const history = lookupHandler("browser.history");
+  expect(history).toBeFunction();
+  const moved = (await history?.(ctx, {
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "back",
+  })) as Awaited<ReturnType<CanvasStore["moveBrowserHistory"]>>;
+
+  expect(moved.browser.url).toBe("https://example.com/one");
+  expect(browserPaneFrom(moved.workspace, browserPane.id).historyIndex).toBe(1);
+});
+
+async function saveWorkspaceWithBrowserPane(store: CanvasStore): Promise<{
+  workspace: Workspace;
+  browserPane: BrowserPaneState;
+}> {
   const workspace = await store.getActiveWorkspace();
   const now = new Date().toISOString();
-  const browserPane = {
+  const browserPane: BrowserPaneState = {
     id: "browser:test",
-    type: "browser" as const,
+    type: "browser",
     title: "Browser",
     url: "about:blank",
     history: ["about:blank"],
     historyIndex: 0,
     sessionId: "browser:test:session",
-    placement: "tiled" as const,
+    placement: "tiled",
     rect: { x: 0, y: 0, width: 800, height: 500 },
     z: 1,
     createdAt: now,
     updatedAt: now,
   };
-  await store.saveWorkspace({
+  const saved = await store.saveWorkspace({
     ...workspace,
     panes: [...workspace.panes, browserPane],
     tiledLayout: {
@@ -263,15 +378,14 @@ test("browser sessions persist pane navigation state", async () => {
       second: { type: "leaf", paneId: browserPane.id },
     },
   });
+  return { workspace: saved, browserPane };
+}
 
-  const navigated = await store.navigateBrowserPane({
-    workspaceId: workspace.id,
-    paneId: browserPane.id,
-    url: "data:text/html,<h1>Canvas</h1>",
-  });
-  expect(navigated.browser.url).toContain("data:text/html");
-  expect(navigated.browser.profilePath).toContain(encodeURIComponent(workspace.id));
-});
+function browserPaneFrom(workspace: Workspace, paneId: string): BrowserPaneState {
+  const pane = workspace.panes.find((candidate) => candidate.id === paneId);
+  if (pane?.type !== "browser") throw new Error(`missing browser pane: ${paneId}`);
+  return pane;
+}
 
 async function run(command: string, args: string[], cwd: string) {
   const proc = Bun.spawn([command, ...args], { cwd, stdout: "pipe", stderr: "pipe" });

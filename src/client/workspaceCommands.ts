@@ -55,7 +55,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "workspace.view.panes",
       label: "Show Panes",
-      scope: "workspace",
       group: "workspace",
       enabled,
       run: () => args.setView("panes"),
@@ -63,7 +62,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "workspace.view.canvas",
       label: "Show Canvas",
-      scope: "workspace",
       group: "workspace",
       enabled,
       run: () => args.setView("canvas"),
@@ -71,7 +69,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "workspace.refresh",
       label: "Refresh Workspace",
-      scope: "workspace",
       group: "workspace",
       enabled,
       run: args.refreshExplorer,
@@ -79,7 +76,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.open.explorer",
       label: "Open Explorer",
-      scope: "pane",
       group: "pane",
       enabled,
       run: args.openExplorerPane,
@@ -87,7 +83,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.open.terminal",
       label: "Open Terminal",
-      scope: "pane",
       group: "pane",
       hint: contextFolder,
       enabled,
@@ -96,7 +91,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.open.browser",
       label: "Open Browser",
-      scope: "browser",
       group: "browser",
       enabled,
       run: () => args.openBrowserPane("about:blank"),
@@ -104,7 +98,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.open.repositories",
       label: "Open Repositories",
-      scope: "git",
       group: "git",
       enabled,
       run: () => args.openRepositoriesPane(),
@@ -112,7 +105,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.open.source-control",
       label: "Open Source Control",
-      scope: "git",
       group: "git",
       hint: args.repositories[0]?.relativePath,
       enabled,
@@ -121,7 +113,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.open.settings",
       label: "Open Settings",
-      scope: "workspace",
       group: "workspace",
       enabled,
       run: () => args.openSettingsPane(),
@@ -129,7 +120,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "fs.open-file",
       label: "Open in Editor",
-      scope: "filesystem",
       group: "item",
       hint: selectedPath ?? undefined,
       enabled: () => (args.selectedEntry?.kind === "file" ? enabled() : disabled("select a file")),
@@ -140,7 +130,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "fs.delete-entry",
       label: args.selectedEntry?.kind === "dir" ? "Delete Folder" : "Delete File",
-      scope: "filesystem",
       group: "item",
       hint: selectedPath ?? undefined,
       destructive: true,
@@ -152,7 +141,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "new.folder",
       label: "+ Subfolder",
-      scope: "filesystem",
       group: "new",
       hint: contextFolder,
       enabled,
@@ -161,7 +149,6 @@ export function createWorkspaceCommands(args: {
     ...(["markdown", "json", "yaml", "typescript", "plain"] as const).map((kind) => ({
       id: `new.file.${kind}`,
       label: `+ File: ${kind}`,
-      scope: "filesystem" as const,
       group: "new",
       hint: contextFolder,
       enabled,
@@ -170,7 +157,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.save-active",
       label: "Save Active Editor",
-      scope: "pane",
       group: "pane",
       hint: activeEditor?.filePath,
       enabled: () => (activeEditor ? enabled() : disabled("focus an editor")),
@@ -181,7 +167,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.split-active",
       label: "Split Active Pane Right",
-      scope: "pane",
       group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
@@ -192,7 +177,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.split-active-vertical",
       label: "Split Active Pane Down",
-      scope: "pane",
       group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
@@ -203,7 +187,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.tab-active",
       label: "New Tab in Active Pane",
-      scope: "pane",
       group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
@@ -214,7 +197,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.float-active",
       label: "Float Active Pane",
-      scope: "pane",
       group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),
@@ -225,7 +207,6 @@ export function createWorkspaceCommands(args: {
     {
       id: "pane.close-active",
       label: "Close Active Pane",
-      scope: "pane",
       group: "pane",
       hint: args.activePane?.title,
       enabled: () => (args.activePane ? enabled() : disabled("focus a pane")),

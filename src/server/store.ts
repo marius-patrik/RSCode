@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
+import { browserStoredUrl } from "@/shared/browser";
 import { getPaths } from "@/shared/paths";
 import {
   type BrowserPaneState,
@@ -283,19 +284,50 @@ export class CanvasStore {
     url: string;
     replace?: boolean;
   }): Promise<{ workspace: Workspace; browser: BrowserSession }> {
+    const url = browserStoredUrl(input.url);
     const workspace = await this.requireWorkspace(input.workspaceId);
     const nextPanes = workspace.panes.map((pane) => {
       if (pane.id !== input.paneId) return pane;
       if (pane.type !== "browser") throw new Error(`pane is not a browser: ${pane.id}`);
+      const baseHistory = pane.history.length > 0 ? pane.history.map(browserStoredUrl) : [browserStoredUrl(pane.url)];
+      const currentIndex = clampIndex(pane.historyIndex, baseHistory.length);
       const history = input.replace
-        ? [...pane.history.slice(0, pane.historyIndex), input.url, ...pane.history.slice(pane.historyIndex + 1)]
-        : [...pane.history.slice(0, pane.historyIndex + 1), input.url];
+        ? baseHistory.map((entry, index) => (index === currentIndex ? url : entry))
+        : [...baseHistory.slice(0, currentIndex + 1), url];
+      const historyIndex = input.replace ? currentIndex : history.length - 1;
       return {
         ...pane,
-        title: titleForBrowserUrl(input.url),
-        url: input.url,
+        title: titleForBrowserUrl(url),
+        url,
         history,
-        historyIndex: Math.max(0, history.length - 1),
+        historyIndex,
+        updatedAt: now(),
+      } satisfies BrowserPaneState;
+    });
+    const saved = await this.saveWorkspace({ ...workspace, panes: nextPanes, activePaneId: input.paneId });
+    return { workspace: saved, browser: await this.getBrowserSession(saved.id, input.paneId) };
+  }
+
+  async moveBrowserHistory(input: {
+    workspaceId: string;
+    paneId: string;
+    direction: "back" | "forward";
+  }): Promise<{ workspace: Workspace; browser: BrowserSession }> {
+    const workspace = await this.requireWorkspace(input.workspaceId);
+    const nextPanes = workspace.panes.map((pane) => {
+      if (pane.id !== input.paneId) return pane;
+      if (pane.type !== "browser") throw new Error(`pane is not a browser: ${pane.id}`);
+      const history = pane.history.length > 0 ? pane.history.map(browserStoredUrl) : [browserStoredUrl(pane.url)];
+      const currentIndex = clampIndex(pane.historyIndex, history.length);
+      const delta = input.direction === "back" ? -1 : 1;
+      const historyIndex = Math.min(history.length - 1, Math.max(0, currentIndex + delta));
+      const url = history[historyIndex] ?? "about:blank";
+      return {
+        ...pane,
+        title: titleForBrowserUrl(url),
+        url,
+        history,
+        historyIndex,
         updatedAt: now(),
       } satisfies BrowserPaneState;
     });
@@ -443,11 +475,11 @@ function normalizePane(pane: PaneState, index: number, rootPath: string): PaneSt
     z: pane.z ?? index,
   };
   if (base.type === "browser") {
-    const history = base.history.length > 0 ? base.history : [base.url || "about:blank"];
-    const historyIndex = Math.min(base.historyIndex, history.length - 1);
+    const history = (base.history.length > 0 ? base.history : [base.url || "about:blank"]).map(browserStoredUrl);
+    const historyIndex = clampIndex(base.historyIndex, history.length);
     return {
       ...base,
-      url: history[historyIndex] ?? base.url ?? "about:blank",
+      url: history[historyIndex] ?? browserStoredUrl(base.url || "about:blank"),
       history,
       historyIndex,
       sessionId: base.sessionId || `${base.id}:session`,
@@ -514,15 +546,21 @@ function summarizeWorkspace(workspace: Workspace): WorkspaceSummary {
 }
 
 function browserSessionFor(root: string, workspaceId: string, pane: BrowserPaneState): BrowserSession {
+  const url = browserStoredUrl(pane.url);
   return {
     workspaceId,
     paneId: pane.id,
-    url: pane.url,
-    title: titleForBrowserUrl(pane.url),
+    url,
+    title: titleForBrowserUrl(url),
     canGoBack: pane.historyIndex > 0,
     canGoForward: pane.historyIndex < pane.history.length - 1,
     profilePath: resolve(root, encodeURIComponent(workspaceId), encodeURIComponent(pane.id)),
   };
+}
+
+function clampIndex(index: number, length: number): number {
+  if (length <= 0) return 0;
+  return Math.min(Math.max(index, 0), length - 1);
 }
 
 function titleForBrowserUrl(url: string): string {

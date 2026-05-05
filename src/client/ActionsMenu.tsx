@@ -1,15 +1,6 @@
+import { matchesSubsequence } from "@/client/search";
 import { cn } from "@/shared/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-// UE5-style searchable, categorised right-click menu. Replaces the old
-// flat ContextMenu. Two open modes:
-//   "actions" — context-sensitive items derived from the right-click target
-//   "search"  — flat list of nodes in the canvas, fits the chosen node
-//
-// Filtering is a tiny inline subsequence matcher (no fuzzy lib). Keyboard:
-//   ↑/↓ or Tab/Shift-Tab → move highlight
-//   Enter                → run highlighted item
-//   Esc                  → close (parent owns the close pointerdown effect)
 
 export type ActionItem = {
   id: string;
@@ -49,7 +40,7 @@ export function ActionsMenu({
     const flat: Array<{ group: ActionGroup; item: ActionItem }> = [];
     for (const g of groups) {
       for (const it of g.items) {
-        if (!filterText || matches(filterText, `${g.label} ${it.label} ${it.hint ?? ""}`)) {
+        if (!filterText || matchesSubsequence(filterText, `${g.label} ${it.label} ${it.hint ?? ""}`)) {
           flat.push({ group: g, item: it });
         }
       }
@@ -169,17 +160,4 @@ export function ActionsMenu({
       </div>
     </div>
   );
-}
-
-// Subsequence matcher — every char of query appears in target in order.
-// Cheap and forgiving; good enough for "edit" matching "Edit objective".
-function matches(query: string, target: string): boolean {
-  const t = target.toLowerCase();
-  let i = 0;
-  for (const ch of query) {
-    const found = t.indexOf(ch, i);
-    if (found === -1) return false;
-    i = found + 1;
-  }
-  return true;
 }

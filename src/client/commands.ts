@@ -1,14 +1,5 @@
 import type { ActionGroup, ActionItem } from "@/client/ActionsMenu";
 
-export type CommandScope =
-  | "global"
-  | "workspace"
-  | "filesystem"
-  | "pane"
-  | "browser"
-  | "git"
-  | "navigation";
-
 export type CommandAvailability =
   | { enabled: true }
   | { enabled: false; reason: string };
@@ -16,14 +7,9 @@ export type CommandAvailability =
 export type CommandDefinition = {
   id: string;
   label: string;
-  scope: CommandScope;
   group: string;
   hint?: string;
   destructive?: boolean;
-  confirmation?: {
-    title: string;
-    message: string;
-  };
   enabled: () => CommandAvailability;
   run: () => void | Promise<void>;
 };

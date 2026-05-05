@@ -1,19 +1,32 @@
 import { websocketUrl } from "@/client/endpoints";
 import { urlForLauncherQuery } from "@/client/launcher";
 import type { BrowserPaneState } from "@/shared/schema";
-import { AlertTriangle, ChevronRight, Globe2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight, Globe2, RotateCw } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+
+type BrowserSocketMessage = {
+  type?: string;
+  image?: string;
+  renderer?: string;
+  message?: string;
+  url?: string;
+  browser?: { url: string; canGoBack: boolean; canGoForward: boolean };
+};
 
 export function BrowserPane({
   workspaceId,
   pane,
   baseUrl,
   onBrowserNavigate,
+  onBrowserHistory,
+  onBrowserSync,
 }: {
   workspaceId: string;
   pane: BrowserPaneState;
   baseUrl?: string;
-  onBrowserNavigate: (workspaceId: string, paneId: string, url: string) => Promise<void>;
+  onBrowserNavigate: (workspaceId: string, paneId: string, url: string, replace?: boolean) => Promise<void>;
+  onBrowserHistory: (workspaceId: string, paneId: string, direction: "back" | "forward") => Promise<void>;
+  onBrowserSync: (workspaceId: string) => Promise<void>;
 }) {
   const [address, setAddress] = useState(pane.url);
   const [frame, setFrame] = useState<string | null>(null);
@@ -21,8 +34,13 @@ export function BrowserPane({
   const [browserError, setBrowserError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const paneRef = useRef(pane);
+  const lastFrameUrlRef = useRef<string | null>(null);
 
   useEffect(() => setAddress(pane.url), [pane.url]);
+  useEffect(() => {
+    paneRef.current = pane;
+  }, [pane]);
 
   useEffect(() => {
     const url = new URL(websocketUrl(baseUrl, "/api/browser/stream"));
@@ -32,16 +50,35 @@ export function BrowserPane({
     wsRef.current = ws;
     ws.onmessage = (event) => {
       if (typeof event.data !== "string") return;
-      let parsed: { type?: string; image?: string; renderer?: string; message?: string };
+      let parsed: BrowserSocketMessage;
       try {
-        parsed = JSON.parse(event.data) as { type?: string; image?: string; renderer?: string; message?: string };
+        parsed = JSON.parse(event.data) as BrowserSocketMessage;
       } catch {
         setBrowserError("Browser sent an invalid message.");
         return;
       }
+      if (parsed.type === "state" && parsed.browser) {
+        const currentPane = paneRef.current;
+        setAddress(parsed.browser.url);
+        const canGoBack = currentPane.historyIndex > 0;
+        const canGoForward = currentPane.historyIndex < currentPane.history.length - 1;
+        if (
+          parsed.browser.url !== currentPane.url ||
+          parsed.browser.canGoBack !== canGoBack ||
+          parsed.browser.canGoForward !== canGoForward
+        ) {
+          void onBrowserSync(workspaceId);
+        }
+      }
       if (parsed.type === "frame" && parsed.image) {
         setFrame(parsed.image);
         setBrowserError(null);
+        if (parsed.url) {
+          const currentPane = paneRef.current;
+          lastFrameUrlRef.current = parsed.url;
+          setAddress(parsed.url);
+          if (parsed.url !== currentPane.url) void onBrowserSync(workspaceId);
+        }
       }
       if (parsed.renderer) setRenderer(parsed.renderer);
       if (parsed.type === "error") {
@@ -58,9 +95,10 @@ export function BrowserPane({
       ws.onclose = null;
       ws.close();
     };
-  }, [baseUrl, pane.id, workspaceId]);
+  }, [baseUrl, onBrowserSync, pane.id, workspaceId]);
 
   useEffect(() => {
+    if (lastFrameUrlRef.current === pane.url) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "reload", url: pane.url }));
     }
@@ -77,6 +115,9 @@ export function BrowserPane({
     await onBrowserNavigate(workspaceId, pane.id, next);
   };
 
+  const canGoBack = pane.historyIndex > 0;
+  const canGoForward = pane.historyIndex < pane.history.length - 1;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <form
@@ -87,6 +128,23 @@ export function BrowserPane({
         }}
       >
         <Globe2 className="h-4 w-4 text-muted-foreground" />
+        <ToolbarButton
+          title="Back"
+          disabled={!canGoBack}
+          onClick={() => void onBrowserHistory(workspaceId, pane.id, "back")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Forward"
+          disabled={!canGoForward}
+          onClick={() => void onBrowserHistory(workspaceId, pane.id, "forward")}
+        >
+          <ArrowRight className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton title="Reload" onClick={() => sendBrowserMessage({ type: "reload", url: pane.url })}>
+          <RotateCw className="h-4 w-4" />
+        </ToolbarButton>
         <input
           value={address}
           onChange={(event) => setAddress(event.target.value)}
@@ -159,6 +217,30 @@ export function BrowserPane({
         ) : null}
       </button>
     </div>
+  );
+}
+
+function ToolbarButton({
+  title,
+  disabled,
+  onClick,
+  children,
+}: {
+  title: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-secondary text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground"
+    >
+      {children}
+    </button>
   );
 }
 

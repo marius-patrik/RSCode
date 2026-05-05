@@ -41,6 +41,11 @@ export type CanvasClient = {
       url: string;
       replace?: boolean;
     }): Promise<{ workspace: Workspace; browser: BrowserSession }>;
+    history(input: {
+      workspaceId: string;
+      paneId: string;
+      direction: "back" | "forward";
+    }): Promise<{ workspace: Workspace; browser: BrowserSession }>;
   };
 };
 
@@ -103,6 +108,7 @@ export function makeClient(url = getBaseUrl()): CanvasClient {
     },
     browser: {
       navigate: (input) => post(url, "browser.navigate", input),
+      history: (input) => post(url, "browser.history", input),
     },
   };
 }

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { browserRuntimeUrl, browserStoredUrl } from "@/shared/browser";
 import type { BrowserSession } from "@/shared/schema";
 import { type BrowserContext, type Page, chromium } from "playwright-chromium";
 
@@ -53,18 +54,7 @@ export class BrowserFrameService {
   async frameFor(session: BrowserSession): Promise<BrowserFrameMessage> {
     const live = await this.liveBrowserFor(session);
     await this.ensurePageUrl(live, session.url);
-    const bytes = await live.page.screenshot({ type: "png", fullPage: false }).catch(async (error) => {
-      await this.log(`browser chromium capture failed: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    });
-    return {
-      type: "frame",
-      url: live.page.url(),
-      image: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
-      mimeType: "image/png",
-      renderer: "chromium",
-      ts: Date.now(),
-    };
+    return this.captureFrame(live);
   }
 
   async stateFor(session: BrowserSession): Promise<BrowserStateMessage> {
@@ -95,7 +85,9 @@ export class BrowserFrameService {
     } else if (message.type === "type") {
       await live.page.keyboard.type(message.text);
     }
-    return this.frameFor({ ...session, url: live.page.url() });
+    await live.page.waitForLoadState("domcontentloaded", { timeout: 3_000 }).catch(() => undefined);
+    live.currentUrl = live.page.url();
+    return this.captureFrame(live);
   }
 
   async close(): Promise<void> {
@@ -146,10 +138,26 @@ export class BrowserFrameService {
   }
 
   private async ensurePageUrl(live: LiveBrowser, url: string): Promise<void> {
-    const targetUrl = normalizeBrowserUrl(url);
+    const targetUrl = browserRuntimeUrl(url);
     if (live.currentUrl === targetUrl && live.page.url() === targetUrl) return;
     await live.page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 12_000 });
     live.currentUrl = targetUrl;
+  }
+
+  private async captureFrame(live: LiveBrowser): Promise<BrowserFrameMessage> {
+    const bytes = await live.page.screenshot({ type: "png", fullPage: false }).catch(async (error) => {
+      await this.log(`browser chromium capture failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    });
+    live.currentUrl = live.page.url();
+    return {
+      type: "frame",
+      url: browserStoredUrl(live.page.url()),
+      image: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
+      mimeType: "image/png",
+      renderer: "chromium",
+      ts: Date.now(),
+    };
   }
 
   private requireExecutablePath(): string {
@@ -158,14 +166,6 @@ export class BrowserFrameService {
     }
     return this.executablePath;
   }
-}
-
-function normalizeBrowserUrl(url: string): string {
-  if (!url || url === "about:blank") {
-    return "data:text/html,<title>Blank</title><body style='background:%23111111;color:white'></body>";
-  }
-  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(url)) return url;
-  return `https://${url}`;
 }
 
 function findChromiumExecutable(): string | null {

@@ -10,7 +10,6 @@ test("command registry surfaces disabled reasons and prevents disabled execution
     {
       id: "enabled",
       label: "Enabled",
-      scope: "global",
       group: "workspace",
       enabled,
       run: () => {
@@ -20,7 +19,6 @@ test("command registry surfaces disabled reasons and prevents disabled execution
     {
       id: "disabled",
       label: "Disabled",
-      scope: "global",
       group: "workspace",
       enabled: () => disabled("missing context"),
       run: () => {

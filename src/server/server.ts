@@ -95,7 +95,10 @@ export async function startServer() {
 
   const distRoot = resolve(import.meta.dir, "..", "..", "dist", "web");
 
-  type TerminalSession = { cwd: string; buffer: string; queue: Promise<void> };
+  type TerminalSession = {
+    proc: ReturnType<typeof Bun.spawn>;
+    closed: boolean;
+  };
   const terminals = new WeakMap<object, TerminalSession>();
 
   type WSData =
@@ -156,8 +159,8 @@ export async function startServer() {
           return;
         }
         const cwd = ws.data.cwd || paths.root;
-        terminals.set(ws as unknown as object, { cwd, buffer: "", queue: Promise.resolve() });
-        ws.send(`canvas:${cwd}$ `);
+        const session = spawnTerminalSession(ws, cwd);
+        terminals.set(ws as unknown as object, session);
       },
       async message(ws, message) {
         if (ws.data.kind === "browser") {
@@ -166,19 +169,14 @@ export async function startServer() {
         }
         const session = terminals.get(ws as unknown as object);
         if (!session) return;
-        const chunk =
-          typeof message === "string" ? message : new TextDecoder().decode(new Uint8Array(message));
-        session.buffer += chunk.replace(/\r/g, "\n");
-        const lines = session.buffer.split("\n");
-        session.buffer = lines.pop() ?? "";
-        for (const rawLine of lines) {
-          session.queue = session.queue.then(() => runTerminalLine(ws, session, rawLine));
-        }
-        await session.queue;
+        handleTerminalMessage(session, message);
       },
       close(ws) {
         const session = terminals.get(ws as unknown as object);
         if (!session) return;
+        session.closed = true;
+        session.proc.kill("SIGTERM");
+        session.proc.terminal?.close();
         terminals.delete(ws as unknown as object);
       },
     },
@@ -239,13 +237,22 @@ export async function startServer() {
         workspaceId: ws.data.workspaceId,
         paneId: ws.data.paneId,
         url: command.url,
+        replace: command.replace === true,
       });
     }
     if (isBrowserInteractionMessage(command)) {
       try {
         const session = await store.getBrowserSession(ws.data.workspaceId, ws.data.paneId);
         const frame = await browserFrames.interact(session, command);
-        ws.send(JSON.stringify(await browserFrames.stateFor(session)));
+        const persisted =
+          frame.url !== session.url
+            ? await store.navigateBrowserPane({
+                workspaceId: ws.data.workspaceId,
+                paneId: ws.data.paneId,
+                url: frame.url,
+              })
+            : { browser: session };
+        ws.send(JSON.stringify(await browserFrames.stateFor(persisted.browser)));
         ws.send(JSON.stringify(frame));
         return;
       } catch (error) {
@@ -254,6 +261,36 @@ export async function startServer() {
       }
     }
     await sendBrowserStateAndFrame(ws, ws.data.workspaceId, ws.data.paneId);
+  }
+
+  function spawnTerminalSession(ws: ServerWebSocketLike, cwd: string): TerminalSession {
+    const session: TerminalSession = {
+      proc: undefined as unknown as ReturnType<typeof Bun.spawn>,
+      closed: false,
+    };
+    const proc = Bun.spawn([process.env.SHELL ?? "/bin/bash", "-l"], {
+      cwd,
+      env: { ...process.env, TERM: "xterm-256color" },
+      terminal: {
+        cols: 80,
+        rows: 24,
+        data(_terminal, data) {
+          if (!session.closed) ws.send(data);
+        },
+      },
+    });
+    session.proc = proc;
+    if (!proc.terminal) {
+      ws.send("PTY unavailable\r\n");
+      ws.close(1011, "pty unavailable");
+      return session;
+    }
+    void proc.exited.finally(() => {
+      session.closed = true;
+      ws.close(1000, "shell exited");
+      proc.terminal?.close();
+    });
+    return session;
   }
 }
 
@@ -280,46 +317,29 @@ function bufferSourceToBytes(source: BufferSource): Uint8Array {
   return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
 }
 
-async function runTerminalLine(
-  ws: ServerWebSocketLike,
-  session: { cwd: string },
-  rawLine: string,
+function handleTerminalMessage(
+  session: { proc: ReturnType<typeof Bun.spawn> },
+  message: string | BufferSource,
 ) {
-  const line = rawLine.trim();
-  if (!line) {
-    ws.send(`\r\ncanvas:${session.cwd}$ `);
+  const source = typeof message === "string" ? message : new TextDecoder().decode(bufferSourceToBytes(message));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
     return;
   }
-  ws.send(`${line}\r\n`);
-  if (line === "exit") {
-    ws.close(1000, "shell exited");
-    return;
+  if (!parsed || typeof parsed !== "object") return;
+  const command = parsed as Record<string, unknown>;
+  if (command.type === "input" && typeof command.data === "string") {
+    session.proc.terminal?.write(command.data);
   }
-  if (line === "pwd") {
-    ws.send(`${session.cwd}\r\ncanvas:${session.cwd}$ `);
-    return;
+  if (
+    command.type === "resize" &&
+    typeof command.cols === "number" &&
+    typeof command.rows === "number"
+  ) {
+    session.proc.terminal?.resize(Math.max(1, Math.floor(command.cols)), Math.max(1, Math.floor(command.rows)));
   }
-  if (line.startsWith("cd ")) {
-    session.cwd = resolve(session.cwd, line.slice(3).trim());
-    ws.send(`canvas:${session.cwd}$ `);
-    return;
-  }
-
-  const proc = Bun.spawn([process.env.SHELL ?? "/bin/bash", "-lc", line], {
-    cwd: session.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, TERM: "xterm-256color" },
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  if (stdout) ws.send(stdout.replace(/\n/g, "\r\n"));
-  if (stderr) ws.send(stderr.replace(/\n/g, "\r\n"));
-  if (exitCode !== 0) ws.send(`[exit ${exitCode}]\r\n`);
-  ws.send(`canvas:${session.cwd}$ `);
 }
 
 type ServerWebSocketLike = {

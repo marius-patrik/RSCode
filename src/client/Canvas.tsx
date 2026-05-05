@@ -98,7 +98,9 @@ type CanvasProps = {
   onRequestRepositories: (rootPath: string) => void;
   onRequestGitStatus: (repoPath: string) => Promise<GitStatus>;
   onRequestGitDiff: (repoPath: string, path: string) => Promise<GitDiff>;
-  onBrowserNavigate: (workspaceId: string, paneId: string, url: string) => Promise<void>;
+  onBrowserNavigate: (workspaceId: string, paneId: string, url: string, replace?: boolean) => Promise<void>;
+  onBrowserHistory: (workspaceId: string, paneId: string, direction: "back" | "forward") => Promise<void>;
+  onBrowserSync: (workspaceId: string) => Promise<void>;
   launcherBrowserRequest: { id: number; url: string } | null;
   onLauncherBrowserRequestHandled: () => void;
   launcherPaneRequest: { id: number; kind: "file" | "folder"; path: string } | null;
@@ -127,6 +129,8 @@ export function Canvas({
   onRequestGitStatus,
   onRequestGitDiff,
   onBrowserNavigate,
+  onBrowserHistory,
+  onBrowserSync,
   launcherBrowserRequest,
   onLauncherBrowserRequestHandled,
   launcherPaneRequest,
@@ -647,6 +651,8 @@ export function Canvas({
             onRequestGitStatus={onRequestGitStatus}
             onRequestGitDiff={onRequestGitDiff}
             onBrowserNavigate={onBrowserNavigate}
+            onBrowserHistory={onBrowserHistory}
+            onBrowserSync={onBrowserSync}
             onOpenSourceControl={openSourceControlPane}
           />
           <FreeformLayer
@@ -676,6 +682,8 @@ export function Canvas({
             onRequestGitStatus={onRequestGitStatus}
             onRequestGitDiff={onRequestGitDiff}
             onBrowserNavigate={onBrowserNavigate}
+            onBrowserHistory={onBrowserHistory}
+            onBrowserSync={onBrowserSync}
             onOpenSourceControl={openSourceControlPane}
           />
         </>
@@ -706,6 +714,8 @@ export function Canvas({
           onRequestGitStatus={onRequestGitStatus}
           onRequestGitDiff={onRequestGitDiff}
           onBrowserNavigate={onBrowserNavigate}
+          onBrowserHistory={onBrowserHistory}
+          onBrowserSync={onBrowserSync}
           onOpenSourceControl={openSourceControlPane}
         />
       )}
@@ -836,7 +846,9 @@ type PaneRenderProps = {
   onRequestRepositories: (rootPath: string) => void;
   onRequestGitStatus: (repoPath: string) => Promise<GitStatus>;
   onRequestGitDiff: (repoPath: string, path: string) => Promise<GitDiff>;
-  onBrowserNavigate: (workspaceId: string, paneId: string, url: string) => Promise<void>;
+  onBrowserNavigate: (workspaceId: string, paneId: string, url: string, replace?: boolean) => Promise<void>;
+  onBrowserHistory: (workspaceId: string, paneId: string, direction: "back" | "forward") => Promise<void>;
+  onBrowserSync: (workspaceId: string) => Promise<void>;
   onOpenSourceControl: (repoPath?: string | null, placement?: PaneState["placement"]) => void;
 };
 
@@ -1012,6 +1024,8 @@ function PaneFrame({
   onRequestGitStatus,
   onRequestGitDiff,
   onBrowserNavigate,
+  onBrowserHistory,
+  onBrowserSync,
   onOpenSourceControl,
 }: PaneRenderProps & {
   pane: PaneState;
@@ -1161,7 +1175,14 @@ function PaneFrame({
         {pane.type === "editor" ? <EditorPane pane={pane} onUpdatePane={onUpdatePane} onSaveEditor={onSaveEditor} /> : null}
         {pane.type === "terminal" ? <TerminalPane pane={pane} baseUrl={baseUrl} /> : null}
         {pane.type === "browser" ? (
-          <BrowserPane workspaceId={workspace.id} pane={pane} baseUrl={baseUrl} onBrowserNavigate={onBrowserNavigate} />
+          <BrowserPane
+            workspaceId={workspace.id}
+            pane={pane}
+            baseUrl={baseUrl}
+            onBrowserNavigate={onBrowserNavigate}
+            onBrowserHistory={onBrowserHistory}
+            onBrowserSync={onBrowserSync}
+          />
         ) : null}
         {pane.type === "sourceControl" ? (
           <SourceControlPane
@@ -1182,9 +1203,7 @@ function PaneFrame({
             onOpenSourceControl={onOpenSourceControl}
           />
         ) : null}
-        {pane.type === "settings" ? (
-          <SettingsPane workspace={workspace} pane={pane} onUpdateSettings={onUpdateSettings} />
-        ) : null}
+        {pane.type === "settings" ? <SettingsPane workspace={workspace} onUpdateSettings={onUpdateSettings} /> : null}
       </div>
     </section>
   );

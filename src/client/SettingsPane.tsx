@@ -6,7 +6,6 @@ import {
 } from "@/client/theme";
 import {
   BUILTIN_WORKSPACE_THEMES,
-  type SettingsPaneState,
   type Workspace,
   type WorkspaceSettings,
   type WorkspaceThemeDefinition,
@@ -20,7 +19,6 @@ export function SettingsPane({
   onUpdateSettings,
 }: {
   workspace: Workspace;
-  pane: SettingsPaneState;
   onUpdateSettings: (patch: Partial<WorkspaceSettings>) => void;
 }) {
   const settings = workspace.settings;

@@ -112,6 +112,14 @@ export const api = {
       }),
       async (ctx, input) => ctx.store.navigateBrowserPane(input),
     ),
+    history: schema(
+      z.object({
+        workspaceId: workspaceIdSchema,
+        paneId: paneIdSchema,
+        direction: z.enum(["back", "forward"]),
+      }),
+      async (ctx, input) => ctx.store.moveBrowserHistory(input),
+    ),
   },
 } as const;
 

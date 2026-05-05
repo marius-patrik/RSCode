@@ -2,12 +2,6 @@ import { websocketUrl } from "@/client/endpoints";
 import type { IDisposable, ITheme, Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 
-// xterm.js terminal hosted inside a workspace pane. Lazy-imports the
-// xterm bundle on mount so the main chunk stays small. Talks to the
-// /api/terminal/spawn WebSocket — server-side spawns a Bun.spawn shell
-// at the requested cwd, pipes stdout/stderr → ws.send and ws.message →
-// proc.stdin. No PTY (vim/htop won't render perfectly).
-
 export const TERMINAL_INPUT_EVENT = "canvas:terminal-input";
 
 const pendingInputs = new Map<string, string[]>();
@@ -62,7 +56,10 @@ export function TerminalNodeView({ cwd, paneId, baseUrl }: { cwd: string; paneId
       const ws = new WebSocket(url.toString());
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
-      ws.onopen = () => flushPendingInput(paneId, ws);
+      ws.onopen = () => {
+        sendTerminalResize(ws, t);
+        flushPendingInput(paneId, ws);
+      };
 
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
@@ -76,10 +73,13 @@ export function TerminalNodeView({ cwd, paneId, baseUrl }: { cwd: string; paneId
       };
 
       dataDisposable = t.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(data);
+        sendTerminalInputEnvelope(ws, data);
       });
 
-      resizeObs = new ResizeObserver(() => fit.fit());
+      resizeObs = new ResizeObserver(() => {
+        fit.fit();
+        sendTerminalResize(ws, t);
+      });
       resizeObs.observe(containerRef.current);
     })();
 
@@ -121,7 +121,17 @@ function flushPendingInput(paneId: string, ws: WebSocket): void {
   const queue = pendingInputs.get(paneId);
   if (!queue?.length) return;
   pendingInputs.delete(paneId);
-  for (const input of queue) ws.send(`${input}\n`);
+  for (const input of queue) sendTerminalInputEnvelope(ws, `${input}\n`);
+}
+
+function sendTerminalInputEnvelope(ws: WebSocket, data: string): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "input", data }));
+}
+
+function sendTerminalResize(ws: WebSocket, term: XTerm): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
 }
 
 function terminalTheme(): ITheme {
