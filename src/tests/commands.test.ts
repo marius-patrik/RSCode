@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { urlForLauncherQuery } from "@/client/App";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled, runCommand } from "@/client/commands";
+import { urlForLauncherQuery } from "@/client/launcher";
 
 test("command registry surfaces disabled reasons and prevents disabled execution", () => {
   let ran = false;

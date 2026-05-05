@@ -2,6 +2,7 @@ import { type ActionGroup, ActionsMenu } from "@/client/ActionsMenu";
 import { MonacoEditor, languageForFile } from "@/client/MonacoEditor";
 import { TerminalNodeView } from "@/client/TerminalNode";
 import { type CommandDefinition, commandGroupsFor, disabled, enabled } from "@/client/commands";
+import { urlForLauncherQuery } from "@/client/launcher";
 import type {
   BrowserPaneState,
   EditorPaneState,
@@ -1324,7 +1325,8 @@ function BrowserPane({
   }, []);
 
   const navigate = async () => {
-    const next = address.trim() || "about:blank";
+    const next = urlForLauncherQuery(address) ?? "about:blank";
+    setAddress(next);
     await onBrowserNavigate(workspaceId, pane.id, next);
   };
 
