@@ -855,7 +855,14 @@ function FreeformPane({
   pane: PaneState;
   placement: "floating" | "canvas";
 }) {
-  const dragRef = useRef<{ mode: "move" | "resize"; startX: number; startY: number; rect: PaneRect } | null>(null);
+  const dragRef = useRef<{
+    mode: "move" | "resize";
+    startX: number;
+    startY: number;
+    rect: PaneRect;
+    nextRect: PaneRect;
+  } | null>(null);
+  const [draftRect, setDraftRect] = useState<PaneRect | null>(null);
 
   useEffect(() => {
     function onMove(event: PointerEvent) {
@@ -863,24 +870,26 @@ function FreeformPane({
       if (!drag) return;
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
-      if (drag.mode === "move") {
-        onUpdatePane(pane.id, (candidate) => ({
-          ...candidate,
-          rect: clampRect({ ...drag.rect, x: drag.rect.x + dx, y: drag.rect.y + dy }),
-        }));
-      } else {
-        onUpdatePane(pane.id, (candidate) => ({
-          ...candidate,
-          rect: clampRect({
-            ...drag.rect,
-            width: drag.rect.width + dx,
-            height: drag.rect.height + dy,
-          }),
-        }));
-      }
+      const nextRect =
+        drag.mode === "move"
+          ? clampRect({ ...drag.rect, x: drag.rect.x + dx, y: drag.rect.y + dy })
+          : clampRect({
+              ...drag.rect,
+              width: drag.rect.width + dx,
+              height: drag.rect.height + dy,
+            });
+      drag.nextRect = nextRect;
+      setDraftRect(nextRect);
     }
     function onUp() {
+      const drag = dragRef.current;
       dragRef.current = null;
+      setDraftRect(null);
+      if (!drag) return;
+      onUpdatePane(pane.id, (candidate) => ({
+        ...candidate,
+        rect: drag.nextRect,
+      }));
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -890,14 +899,16 @@ function FreeformPane({
     };
   }, [onUpdatePane, pane.id]);
 
+  const rect = draftRect ?? pane.rect;
+
   return (
     <section
       className="pointer-events-auto absolute overflow-hidden rounded-md border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
       style={{
-        left: pane.rect.x,
-        top: pane.rect.y,
-        width: pane.rect.width,
-        height: pane.rect.height,
+        left: rect.x,
+        top: rect.y,
+        width: rect.width,
+        height: rect.height,
         zIndex: pane.z,
       }}
       onPointerDown={() => onFocusPane(pane.id)}
@@ -920,7 +931,9 @@ function FreeformPane({
               startX: event.clientX,
               startY: event.clientY,
               rect: pane.rect,
+              nextRect: pane.rect,
             };
+            setDraftRect(pane.rect);
           },
         }}
       />
@@ -938,7 +951,9 @@ function FreeformPane({
             startX: event.clientX,
             startY: event.clientY,
             rect: pane.rect,
+            nextRect: pane.rect,
           };
+          setDraftRect(pane.rect);
         }}
       >
         <Maximize2 className="h-3.5 w-3.5 rotate-90" />

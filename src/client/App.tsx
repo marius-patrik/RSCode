@@ -16,7 +16,7 @@ import {
   type WorkspaceThemeColors,
   type WorkspaceThemeDefinition,
 } from "@/shared/schema";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CanvasMountProps = {
   baseUrl?: string;
@@ -81,6 +81,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<AppModal | null>(null);
+  const saveSequenceRef = useRef<Map<string, number>>(new Map());
   const activeTheme = useMemo(() => resolveWorkspaceTheme(activeWorkspace?.settings), [activeWorkspace?.settings]);
 
   useEffect(() => {
@@ -224,6 +225,8 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
 
   const onWorkspaceChange = useCallback(
     (nextWorkspace: Workspace) => {
+      const nextSequence = (saveSequenceRef.current.get(nextWorkspace.id) ?? 0) + 1;
+      saveSequenceRef.current.set(nextWorkspace.id, nextSequence);
       setActiveWorkspace(nextWorkspace);
       setWorkspaces((prev) =>
         prev.map((workspace) => (workspace.id === nextWorkspace.id ? summarizeWorkspace(nextWorkspace) : workspace)),
@@ -231,6 +234,7 @@ export function CanvasMount({ baseUrl, initialWorkspaceId, className }: CanvasMo
       void (async () => {
         try {
           const saved = (await client.workspace.save.mutate({ workspace: nextWorkspace })) as { workspace: Workspace };
+          if (saveSequenceRef.current.get(saved.workspace.id) !== nextSequence) return;
           setActiveWorkspace((current) => (current?.id === saved.workspace.id ? workspaceWithDefaults(saved.workspace) : current));
           setWorkspaces((prev) =>
             prev.map((workspace) => (workspace.id === saved.workspace.id ? summarizeWorkspace(saved.workspace) : workspace)),
