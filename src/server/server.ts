@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type AppContext, lookupHandler } from "@/server/api";
-import { BrowserFrameService, type BrowserInteractionMessage } from "@/server/browserService";
+import { BrowserFrameService, type BrowserInteractionMessage, type BrowserStreamHandle } from "@/server/browserService";
 import { serveWebAsset } from "@/server/static";
 import { CanvasStore } from "@/server/store";
 import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
@@ -73,6 +75,13 @@ export async function startServer() {
   const browserFrames = new BrowserFrameService(paths.browserProfilesDir, (line) =>
     logLine(paths.serviceLogFile, `[${new Date().toISOString()}] ${line}`),
   );
+  const tmuxExecutable = findTmuxExecutable();
+  if (!tmuxExecutable) {
+    await logLine(
+      paths.serviceLogFile,
+      `[${new Date().toISOString()}] tmux unavailable; terminal process persistence disabled`,
+    );
+  }
   let shuttingDown = false;
 
   await writeFile(
@@ -98,11 +107,14 @@ export async function startServer() {
   type TerminalSession = {
     proc: ReturnType<typeof Bun.spawn>;
     closed: boolean;
+    mode: "tmux" | "direct";
   };
   const terminals = new WeakMap<object, TerminalSession>();
+  const pendingTerminalMessages = new WeakMap<object, Array<string | BufferSource>>();
+  const browserStreams = new WeakMap<object, BrowserStreamHandle>();
 
   type WSData =
-    | { kind: "terminal"; cwd: string }
+    | { kind: "terminal"; paneId: string; cwd: string }
     | { kind: "browser"; workspaceId: string; paneId: string };
   const server = Bun.serve<WSData>({
     port: getServicePort(),
@@ -128,8 +140,12 @@ export async function startServer() {
       }
 
       if (url.pathname === "/api/terminal/spawn") {
+        const paneId = url.searchParams.get("paneId");
+        if (!paneId) {
+          return new Response("paneId is required", { status: 400, headers: CORS_HEADERS });
+        }
         const cwd = url.searchParams.get("cwd") || paths.root;
-        const upgraded = srv.upgrade(request, { data: { kind: "terminal", cwd } });
+        const upgraded = srv.upgrade(request, { data: { kind: "terminal", paneId, cwd } });
         if (upgraded) return undefined as unknown as Response;
         return new Response("websocket upgrade required", { status: 426 });
       }
@@ -155,12 +171,21 @@ export async function startServer() {
     websocket: {
       async open(ws) {
         if (ws.data.kind === "browser") {
-          await sendBrowserStateAndFrame(ws, ws.data.workspaceId, ws.data.paneId);
+          await openBrowserStream(ws, ws.data.workspaceId, ws.data.paneId);
           return;
         }
         const cwd = ws.data.cwd || paths.root;
-        const session = spawnTerminalSession(ws, cwd);
-        terminals.set(ws as unknown as object, session);
+        try {
+          const session = await spawnTerminalSession(ws, ws.data.paneId, cwd);
+          terminals.set(ws as unknown as object, session);
+          const pendingMessages = pendingTerminalMessages.get(ws as unknown as object) ?? [];
+          pendingTerminalMessages.delete(ws as unknown as object);
+          for (const pendingMessage of pendingMessages) handleTerminalMessage(session, pendingMessage);
+        } catch (error) {
+          pendingTerminalMessages.delete(ws as unknown as object);
+          ws.send(`\x1b[31m[terminal failed: ${errorMessage(error)}]\x1b[0m\r\n`);
+          ws.close(1011, "terminal failed");
+        }
       },
       async message(ws, message) {
         if (ws.data.kind === "browser") {
@@ -168,16 +193,28 @@ export async function startServer() {
           return;
         }
         const session = terminals.get(ws as unknown as object);
-        if (!session) return;
+        if (!session) {
+          const pendingMessages = pendingTerminalMessages.get(ws as unknown as object) ?? [];
+          pendingMessages.push(message);
+          pendingTerminalMessages.set(ws as unknown as object, pendingMessages);
+          return;
+        }
         handleTerminalMessage(session, message);
       },
       close(ws) {
+        const browserStream = browserStreams.get(ws as unknown as object);
+        if (browserStream) {
+          browserStream.close();
+          browserStreams.delete(ws as unknown as object);
+          return;
+        }
         const session = terminals.get(ws as unknown as object);
         if (!session) return;
         session.closed = true;
         session.proc.kill("SIGTERM");
         session.proc.terminal?.close();
         terminals.delete(ws as unknown as object);
+        pendingTerminalMessages.delete(ws as unknown as object);
       },
     },
   });
@@ -203,15 +240,23 @@ export async function startServer() {
 
   return server;
 
-  async function sendBrowserStateAndFrame(
+  async function openBrowserStream(
     ws: ServerWebSocketLike,
     workspaceId: string,
     paneId: string,
-  ) {
+  ): Promise<void> {
     try {
       const session = await store.getBrowserSession(workspaceId, paneId);
-      ws.send(JSON.stringify(await browserFrames.stateFor(session)));
-      ws.send(JSON.stringify(await browserFrames.frameFor(session)));
+      const stream = await browserFrames.stream(session, {
+        send: (message) => {
+          ws.send(JSON.stringify(message));
+        },
+        onNavigation: async (url) => {
+          const result = await store.navigateBrowserPane({ workspaceId, paneId, url });
+          return result.browser;
+        },
+      });
+      browserStreams.set(ws as unknown as object, stream);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       ws.send(JSON.stringify({ type: "error", message }));
@@ -233,41 +278,98 @@ export async function startServer() {
     }
     const command = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
     if (command.type === "navigate" && typeof command.url === "string") {
-      await store.navigateBrowserPane({
-        workspaceId: ws.data.workspaceId,
-        paneId: ws.data.paneId,
-        url: command.url,
-        replace: command.replace === true,
-      });
+      try {
+        const persisted = await store.navigateBrowserPane({
+          workspaceId: ws.data.workspaceId,
+          paneId: ws.data.paneId,
+          url: command.url,
+          replace: command.replace === true,
+        });
+        await browserFrames.interact(persisted.browser, {
+          type: "navigate",
+          url: persisted.browser.url,
+          replace: true,
+        });
+      } catch (error) {
+        ws.send(JSON.stringify({ type: "error", message: errorMessage(error) }));
+      }
+      return;
     }
     if (isBrowserInteractionMessage(command)) {
       try {
         const session = await store.getBrowserSession(ws.data.workspaceId, ws.data.paneId);
-        const frame = await browserFrames.interact(session, command);
-        const persisted =
-          frame.url !== session.url
-            ? await store.navigateBrowserPane({
-                workspaceId: ws.data.workspaceId,
-                paneId: ws.data.paneId,
-                url: frame.url,
-              })
-            : { browser: session };
-        ws.send(JSON.stringify(await browserFrames.stateFor(persisted.browser)));
-        ws.send(JSON.stringify(frame));
+        await browserFrames.interact(session, command);
         return;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        ws.send(JSON.stringify({ type: "error", message: errorMessage }));
+        ws.send(JSON.stringify({ type: "error", message: errorMessage(error) }));
       }
     }
-    await sendBrowserStateAndFrame(ws, ws.data.workspaceId, ws.data.paneId);
+    try {
+      ws.send(JSON.stringify(await browserFrames.stateFor(await store.getBrowserSession(ws.data.workspaceId, ws.data.paneId))));
+    } catch (error) {
+      ws.send(JSON.stringify({ type: "error", message: errorMessage(error) }));
+    }
   }
 
-  function spawnTerminalSession(ws: ServerWebSocketLike, cwd: string): TerminalSession {
+  async function spawnTerminalSession(ws: ServerWebSocketLike, paneId: string, cwd: string): Promise<TerminalSession> {
+    if (tmuxExecutable) {
+      return spawnTmuxTerminalSession(ws, tmuxExecutable, tmuxSessionName(paths.root, paneId), resolve(cwd));
+    }
+    return spawnDirectTerminalSession(ws, cwd, "tmux unavailable; live terminal persistence disabled");
+  }
+
+  async function spawnTmuxTerminalSession(
+    ws: ServerWebSocketLike,
+    tmux: string,
+    sessionName: string,
+    cwd: string,
+  ): Promise<TerminalSession> {
+    const exists = await tmuxHasSession(tmux, sessionName);
+    if (!exists) await tmuxNewSession(tmux, sessionName, cwd);
+    if (exists) {
+      const history = await tmuxCaptureHistory(tmux, sessionName);
+      if (history.trim()) ws.send(normalizeTerminalOutput(history));
+    }
     const session: TerminalSession = {
       proc: undefined as unknown as ReturnType<typeof Bun.spawn>,
       closed: false,
+      mode: "tmux",
     };
+    const proc = Bun.spawn([tmux, "attach-session", "-t", sessionName], {
+      env: { ...process.env, TERM: "xterm-256color" },
+      terminal: {
+        cols: 80,
+        rows: 24,
+        data(_terminal, data) {
+          if (!session.closed) ws.send(data);
+        },
+      },
+    });
+    session.proc = proc;
+    if (!proc.terminal) {
+      ws.send("PTY unavailable\r\n");
+      ws.close(1011, "pty unavailable");
+      return session;
+    }
+    void proc.exited.finally(() => {
+      session.closed = true;
+      ws.close(1000, "terminal detached");
+      proc.terminal?.close();
+    });
+    return session;
+  }
+
+  function spawnDirectTerminalSession(
+    ws: ServerWebSocketLike,
+    cwd: string,
+    warning?: string,
+  ): TerminalSession {
+    const session: TerminalSession = {
+      proc: undefined as unknown as ReturnType<typeof Bun.spawn>,
+      closed: false,
+      mode: "direct",
+    };
+    if (warning) ws.send(`\x1b[33m[${warning}]\x1b[0m\r\n`);
     const proc = Bun.spawn([process.env.SHELL ?? "/bin/bash", "-l"], {
       cwd,
       env: { ...process.env, TERM: "xterm-256color" },
@@ -295,6 +397,16 @@ export async function startServer() {
 }
 
 function isBrowserInteractionMessage(command: Record<string, unknown>): command is BrowserInteractionMessage {
+  if (command.type === "viewport") {
+    return typeof command.width === "number" && typeof command.height === "number";
+  }
+  if (command.type === "mouse") {
+    return (
+      (command.event === "move" || command.event === "down" || command.event === "up" || command.event === "dblclick") &&
+      typeof command.x === "number" &&
+      typeof command.y === "number"
+    );
+  }
   if (command.type === "reload") return command.url === undefined || typeof command.url === "string";
   if (command.type === "click") {
     return typeof command.x === "number" && typeof command.y === "number";
@@ -307,7 +419,11 @@ function isBrowserInteractionMessage(command: Record<string, unknown>): command 
       typeof command.deltaY === "number"
     );
   }
-  if (command.type === "key") return typeof command.key === "string";
+  if (command.type === "key") {
+    return (command.event === "down" || command.event === "up") && typeof command.key === "string";
+  }
+  if (command.type === "text") return typeof command.text === "string";
+  if (command.type === "paste") return typeof command.text === "string";
   if (command.type === "type") return typeof command.text === "string";
   return false;
 }
@@ -346,3 +462,68 @@ type ServerWebSocketLike = {
   send: (data: string | Uint8Array) => unknown;
   close: (code?: number, reason?: string) => void;
 };
+
+function findTmuxExecutable(): string | null {
+  if (process.env.CANVAS_TMUX === "0" || process.env.CANVAS_DISABLE_TMUX === "1") return null;
+  const candidates = [
+    process.env.CANVAS_TMUX_PATH,
+    process.env.TMUX_EXECUTABLE_PATH,
+    "/opt/homebrew/bin/tmux",
+    "/usr/local/bin/tmux",
+    "/usr/bin/tmux",
+    "/bin/tmux",
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function tmuxSessionName(root: string, paneId: string): string {
+  const hash = createHash("sha1").update(`${root}\0${paneId}`).digest("hex").slice(0, 24);
+  return `canvas_${hash}`;
+}
+
+async function tmuxHasSession(tmux: string, sessionName: string): Promise<boolean> {
+  const result = await runProcess([tmux, "has-session", "-t", sessionName]);
+  return result.code === 0;
+}
+
+async function tmuxNewSession(tmux: string, sessionName: string, cwd: string): Promise<void> {
+  const result = await runProcess([tmux, "new-session", "-d", "-s", sessionName, "-c", cwd]);
+  if (result.code !== 0) {
+    throw new Error(`tmux new-session failed: ${result.stderr || result.stdout || `exit ${result.code}`}`);
+  }
+}
+
+async function tmuxCaptureHistory(tmux: string, sessionName: string): Promise<string> {
+  const result = await runProcess([tmux, "capture-pane", "-p", "-e", "-J", "-S", "-2000", "-t", `${sessionName}:0.0`]);
+  if (result.code !== 0) return "";
+  return result.stdout;
+}
+
+async function runProcess(command: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  const proc = Bun.spawn(command, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    streamText(proc.stdout),
+    streamText(proc.stderr),
+    proc.exited,
+  ]);
+  return { code, stdout, stderr };
+}
+
+async function streamText(stream: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!stream) return "";
+  return new Response(stream).text();
+}
+
+function normalizeTerminalOutput(output: string): string {
+  return `${output.replace(/\r?\n/g, "\r\n")}\r\n`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

@@ -4,7 +4,7 @@
 
 Canvas is implemented as a Bun/React local app with source under `src/`.
 It owns its local server, store, workspace persistence, filesystem API,
-PTY terminal WebSocket, readonly git API, backend browser panes, and Rsbuild
+tmux-backed terminal WebSocket, readonly git API, live CDP streamed Chromium browser panes, and Rsbuild
 frontend development server.
 
 Development is split across two watched processes:
@@ -17,26 +17,30 @@ Development is split across two watched processes:
 
 - Canvas is a standalone local Bun/React app.
 - `CanvasMount` remains available as an internal embeddable Canvas API.
-- Browser pane history and PTY terminal behavior are part of the local app surface.
-- Live terminal processes and terminal scrollback are runtime state, not persisted workspace state.
+- Browser pane history and tmux-backed terminal behavior are part of the local app surface.
+- Live terminal processes and scrollback survive Canvas server restarts through tmux sessions keyed by terminal pane id.
 
 ## Implemented Milestone
 
 - Removed stale external platform dependency language from docs.
 - Kept `CanvasMount` stable as the internal embeddable mount.
-- Added PTY-backed terminal sessions with JSON input/resize WebSocket messages.
+- Added terminal sessions with JSON input/resize WebSocket messages.
 - Added browser back, forward, and reload controls.
 - Added `browser.history` API.
 - Persisted browser URL changes caused by in-page interactions.
 - Normalized the internal blank browser page back to stored `about:blank`.
-- Added focused tests for browser history and PTY terminal WebSocket behavior.
+- Added focused tests for browser history and terminal WebSocket behavior.
 - Added `bun run dev` orchestration for Bun API watch mode plus Rsbuild HMR.
+- Replaced browser screenshots with CDP `Page.startScreencast` streaming.
+- Added viewport resize, mouse, wheel, keyboard, text, and paste forwarding for browser panes.
+- Replaced direct shell PTYs with tmux-backed terminal sessions and a direct PTY fallback when tmux is unavailable.
+- Added focused browser stream and terminal persistence tests.
 
 ## Known Gaps
 
-- Terminal cwd and pane metadata persist, but live PTY processes and scrollback do not survive a server restart.
-- Browser panes are rendered through backend Chromium screenshots and forwarded input, not a full native embedded browser.
-- Production-style `bun run start` is single-process and serves `dist/web`; frontend HMR is only in `bun run dev`.
+- Browser panes stream Chromium pixels over CDP; they are not native DOM embedding.
+- Browser file chooser, download, and dialog handling is basic.
+- Production-style `bun run start` is single-process and serves `dist/web`; frontend HMR is intentionally only in `bun run dev`.
 
 ## Verification Checklist
 

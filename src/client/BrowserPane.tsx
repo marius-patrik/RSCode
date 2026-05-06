@@ -1,7 +1,7 @@
 import { websocketUrl } from "@/client/endpoints";
 import { urlForLauncherQuery } from "@/client/launcher";
 import type { BrowserPaneState } from "@/shared/schema";
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight, Globe2, RotateCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight, Globe2, Loader2, RotateCw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 type BrowserSocketMessage = {
@@ -10,7 +10,17 @@ type BrowserSocketMessage = {
   renderer?: string;
   message?: string;
   url?: string;
+  width?: number;
+  height?: number;
+  title?: string;
+  loading?: boolean;
   browser?: { url: string; canGoBack: boolean; canGoForward: boolean };
+};
+
+type BrowserFrame = {
+  image: string;
+  width: number;
+  height: number;
 };
 
 export function BrowserPane({
@@ -29,26 +39,54 @@ export function BrowserPane({
   onBrowserSync: (workspaceId: string) => Promise<void>;
 }) {
   const [address, setAddress] = useState(pane.url);
-  const [frame, setFrame] = useState<string | null>(null);
+  const [frame, setFrame] = useState<BrowserFrame | null>(null);
   const [renderer, setRenderer] = useState<string>("connecting");
   const [browserError, setBrowserError] = useState<string | null>(null);
+  const [pageTitle, setPageTitle] = useState(pane.title);
+  const [loading, setLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
+  const viewportRef = useRef<HTMLButtonElement | null>(null);
   const paneRef = useRef(pane);
   const lastFrameUrlRef = useRef<string | null>(null);
+  const lastViewportRef = useRef<{ width: number; height: number } | null>(null);
 
   useEffect(() => setAddress(pane.url), [pane.url]);
   useEffect(() => {
     paneRef.current = pane;
   }, [pane]);
 
+  const sendBrowserMessage = useCallback((payload: Record<string, unknown>) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify(payload));
+  }, []);
+
+  const sendViewport = useCallback(() => {
+    const ws = wsRef.current;
+    const element = viewportRef.current;
+    if (!element || ws?.readyState !== WebSocket.OPEN) return;
+    const rect = element.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    const previous = lastViewportRef.current;
+    if (previous?.width === width && previous.height === height) return;
+    lastViewportRef.current = { width, height };
+    ws.send(JSON.stringify({ type: "viewport", width, height, deviceScaleFactor: 1 }));
+  }, []);
+
   useEffect(() => {
     const url = new URL(websocketUrl(baseUrl, "/api/browser/stream"));
     url.searchParams.set("workspaceId", workspaceId);
     url.searchParams.set("paneId", pane.id);
     const ws = new WebSocket(url.toString());
+    let disposed = false;
     wsRef.current = ws;
+    ws.onopen = () => {
+      if (disposed || wsRef.current !== ws) return;
+      setRenderer("chromium");
+      sendViewport();
+    };
     ws.onmessage = (event) => {
+      if (disposed || wsRef.current !== ws) return;
       if (typeof event.data !== "string") return;
       let parsed: BrowserSocketMessage;
       try {
@@ -60,6 +98,8 @@ export function BrowserPane({
       if (parsed.type === "state" && parsed.browser) {
         const currentPane = paneRef.current;
         setAddress(parsed.browser.url);
+        setPageTitle(parsed.title || parsed.browser.url || currentPane.title);
+        setLoading(parsed.loading === true);
         const canGoBack = currentPane.historyIndex > 0;
         const canGoForward = currentPane.historyIndex < currentPane.history.length - 1;
         if (
@@ -71,7 +111,11 @@ export function BrowserPane({
         }
       }
       if (parsed.type === "frame" && parsed.image) {
-        setFrame(parsed.image);
+        setFrame({
+          image: parsed.image,
+          width: parsed.width || lastViewportRef.current?.width || 1280,
+          height: parsed.height || lastViewportRef.current?.height || 720,
+        });
         setBrowserError(null);
         if (parsed.url) {
           const currentPane = paneRef.current;
@@ -87,27 +131,34 @@ export function BrowserPane({
       }
     };
     ws.onclose = () => {
+      if (disposed || wsRef.current !== ws) return;
       setRenderer("closed");
       setBrowserError("Browser connection closed.");
     };
     return () => {
+      disposed = true;
       ws.onmessage = null;
       ws.onclose = null;
+      if (wsRef.current === ws) wsRef.current = null;
       ws.close();
     };
-  }, [baseUrl, onBrowserSync, pane.id, workspaceId]);
+  }, [baseUrl, onBrowserSync, pane.id, sendViewport, workspaceId]);
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      sendViewport();
+    });
+    observer.observe(element);
+    sendViewport();
+    return () => observer.disconnect();
+  }, [sendViewport]);
 
   useEffect(() => {
     if (lastFrameUrlRef.current === pane.url) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "reload", url: pane.url }));
-    }
-  }, [pane.url]);
-
-  const sendBrowserMessage = useCallback((payload: Record<string, unknown>) => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify(payload));
-  }, []);
+    sendBrowserMessage({ type: "navigate", url: pane.url, replace: true });
+  }, [pane.url, sendBrowserMessage]);
 
   const navigate = async () => {
     const next = urlForLauncherQuery(address) ?? "about:blank";
@@ -142,7 +193,7 @@ export function BrowserPane({
         >
           <ArrowRight className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton title="Reload" onClick={() => sendBrowserMessage({ type: "reload", url: pane.url })}>
+        <ToolbarButton title="Reload" onClick={() => sendBrowserMessage({ type: "reload" })}>
           <RotateCw className="h-4 w-4" />
         </ToolbarButton>
         <input
@@ -150,6 +201,13 @@ export function BrowserPane({
           onChange={(event) => setAddress(event.target.value)}
           className="min-w-0 flex-1 rounded border border-border bg-secondary px-2 py-1 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
         />
+        <div
+          className="hidden max-w-[140px] items-center gap-1 truncate font-mono text-[10px] text-muted-foreground sm:flex"
+          title={pageTitle}
+        >
+          {loading ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" /> : null}
+          <span className="truncate">{loading ? "loading" : pageTitle}</span>
+        </div>
         <button
           type="submit"
           title="Go"
@@ -160,17 +218,56 @@ export function BrowserPane({
       </form>
       <button
         type="button"
+        ref={viewportRef}
         aria-label="Browser viewport"
         className="relative min-h-0 flex-1 appearance-none bg-[var(--panel-bg)] p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+        onMouseMove={(event) => {
+          const point = browserFramePoint(event, viewportRef.current);
+          if (!point) return;
+          sendBrowserMessage({ type: "mouse", event: "move", ...point, modifiers: browserModifiers(event) });
+        }}
         onMouseDown={(event) => {
-          const point = browserFramePoint(event, imageRef.current);
+          const point = browserFramePoint(event, viewportRef.current);
           if (!point) return;
           event.currentTarget.focus();
           event.preventDefault();
-          sendBrowserMessage({ type: "click", ...point, button: browserButton(event.button) });
+          sendBrowserMessage({
+            type: "mouse",
+            event: "down",
+            ...point,
+            button: browserButton(event.button),
+            modifiers: browserModifiers(event),
+          });
+        }}
+        onMouseUp={(event) => {
+          const point = browserFramePoint(event, viewportRef.current);
+          if (!point) return;
+          event.preventDefault();
+          sendBrowserMessage({
+            type: "mouse",
+            event: "up",
+            ...point,
+            button: browserButton(event.button),
+            modifiers: browserModifiers(event),
+          });
+        }}
+        onDoubleClick={(event) => {
+          const point = browserFramePoint(event, viewportRef.current);
+          if (!point) return;
+          event.preventDefault();
+          sendBrowserMessage({
+            type: "mouse",
+            event: "dblclick",
+            ...point,
+            button: browserButton(event.button),
+            modifiers: browserModifiers(event),
+          });
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
         }}
         onWheel={(event) => {
-          const point = browserFramePoint(event, imageRef.current);
+          const point = browserFramePoint(event, viewportRef.current);
           if (!point) return;
           event.preventDefault();
           sendBrowserMessage({
@@ -178,13 +275,39 @@ export function BrowserPane({
             ...point,
             deltaX: event.deltaX,
             deltaY: event.deltaY,
+            modifiers: browserModifiers(event),
           });
         }}
         onKeyDown={(event) => {
-          const message = browserKeyMessage(event);
-          if (!message) return;
+          if (event.nativeEvent.isComposing) return;
           event.preventDefault();
-          sendBrowserMessage(message);
+          sendBrowserMessage({
+            type: "key",
+            event: "down",
+            key: browserKey(event.key),
+            code: event.code,
+            modifiers: browserModifiers(event),
+          });
+          if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            sendBrowserMessage({ type: "text", text: event.key });
+          }
+        }}
+        onKeyUp={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          sendBrowserMessage({
+            type: "key",
+            event: "up",
+            key: browserKey(event.key),
+            code: event.code,
+            modifiers: browserModifiers(event),
+          });
+        }}
+        onPaste={(event) => {
+          const text = event.clipboardData.getData("text/plain");
+          if (!text) return;
+          event.preventDefault();
+          sendBrowserMessage({ type: "paste", text });
         }}
       >
         {browserError ? (
@@ -199,10 +322,11 @@ export function BrowserPane({
           </div>
         ) : frame ? (
           <img
-            ref={imageRef}
-            src={frame}
+            src={frame.image}
+            width={frame.width}
+            height={frame.height}
             alt={pane.url}
-            className="h-full w-full select-none object-contain bg-transparent"
+            className="h-full w-full select-none bg-transparent object-fill"
             draggable={false}
           />
         ) : (
@@ -246,31 +370,16 @@ function ToolbarButton({
 
 function browserFramePoint(
   event: { clientX: number; clientY: number },
-  image: HTMLImageElement | null,
+  viewport: HTMLElement | null,
 ): { x: number; y: number } | null {
-  if (!image) return null;
-  const rect = image.getBoundingClientRect();
-  const naturalWidth = image.naturalWidth || 1280;
-  const naturalHeight = image.naturalHeight || 720;
-  const imageAspect = naturalWidth / naturalHeight;
-  const boxAspect = rect.width / rect.height;
-  let drawWidth = rect.width;
-  let drawHeight = rect.height;
-  let offsetX = 0;
-  let offsetY = 0;
-  if (boxAspect > imageAspect) {
-    drawWidth = rect.height * imageAspect;
-    offsetX = (rect.width - drawWidth) / 2;
-  } else {
-    drawHeight = rect.width / imageAspect;
-    offsetY = (rect.height - drawHeight) / 2;
-  }
-  const localX = event.clientX - rect.left - offsetX;
-  const localY = event.clientY - rect.top - offsetY;
-  if (localX < 0 || localY < 0 || localX > drawWidth || localY > drawHeight) return null;
+  if (!viewport) return null;
+  const rect = viewport.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+  if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return null;
   return {
-    x: Math.round(clamp((localX / drawWidth) * naturalWidth, 0, naturalWidth)),
-    y: Math.round(clamp((localY / drawHeight) * naturalHeight, 0, naturalHeight)),
+    x: Math.round(clamp(localX, 0, rect.width)),
+    y: Math.round(clamp(localY, 0, rect.height)),
   };
 }
 
@@ -280,18 +389,22 @@ function browserButton(button: number): "left" | "middle" | "right" {
   return "left";
 }
 
-function browserKeyMessage(event: {
-  key: string;
-  metaKey: boolean;
-  ctrlKey: boolean;
+function browserKey(key: string): string {
+  return key === " " ? "Space" : key;
+}
+
+function browserModifiers(event: {
   altKey: boolean;
-}): { type: "key"; key: string } | { type: "type"; text: string } | null {
-  if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
-    return { type: "type", text: event.key };
-  }
-  const key = event.key === " " ? "Space" : event.key;
-  const modifier = event.metaKey ? "Meta" : event.ctrlKey ? "Control" : event.altKey ? "Alt" : "";
-  return { type: "key", key: modifier ? `${modifier}+${key}` : key };
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}): number {
+  let modifiers = 0;
+  if (event.altKey) modifiers |= 1;
+  if (event.ctrlKey) modifiers |= 2;
+  if (event.metaKey) modifiers |= 4;
+  if (event.shiftKey) modifiers |= 8;
+  return modifiers;
 }
 
 function clamp(value: number, min: number, max: number): number {

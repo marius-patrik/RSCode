@@ -4,7 +4,7 @@ export const INTERNAL_BLANK_BROWSER_URL =
 
 export function browserRuntimeUrl(url: string): string {
   const stored = browserStoredUrl(url);
-  if (stored === STORED_BLANK_BROWSER_URL) return INTERNAL_BLANK_BROWSER_URL;
+  if (stored === STORED_BLANK_BROWSER_URL) return STORED_BLANK_BROWSER_URL;
   if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(stored)) return stored;
   return `https://${stored}`;
 }

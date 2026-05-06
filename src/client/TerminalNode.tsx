@@ -52,6 +52,7 @@ export function TerminalNodeView({ cwd, paneId, baseUrl }: { cwd: string; paneId
       themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
 
       const url = new URL(websocketUrl(baseUrl, "/api/terminal/spawn"));
+      url.searchParams.set("paneId", paneId);
       url.searchParams.set("cwd", cwd);
       const ws = new WebSocket(url.toString());
       ws.binaryType = "arraybuffer";
