@@ -389,6 +389,28 @@ export class BrowserFrameService {
       deviceScaleFactor: viewport.deviceScaleFactor,
       mobile: false,
     });
+
+    // CDP does not guarantee a fresh screencastFrame for an otherwise static page
+    // when its viewport changes. Capture a post-resize frame explicitly so all
+    // subscribers observe the new dimensions without waiting for a repaint.
+    const { data } = (await live.cdp.send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: false,
+      fromSurface: true,
+    })) as { data: string };
+    const frame: BrowserFrameMessage = {
+      type: "frame",
+      url: browserStoredUrl(live.page.url()),
+      image: `data:image/png;base64,${data}`,
+      mimeType: "image/png",
+      renderer: "chromium",
+      width: viewport.width,
+      height: viewport.height,
+      ts: Date.now(),
+    };
+    live.currentUrl = live.page.url();
+    live.lastFrame = frame;
+    await this.broadcast(live, frame);
   }
 
   private async dispatchMouse(live: LiveBrowser, message: BrowserMouseMessage): Promise<void> {

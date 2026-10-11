@@ -36,6 +36,13 @@ test(
 
         await service.interact(session, { type: "viewport", width: 333, height: 222 });
         await waitFor(() => frames.some((frame) => frame.width === 333 && frame.height === 222), "resized frame");
+        const resized = frames.find((frame) => frame.width === 333 && frame.height === 222);
+        expect(resized).toBeDefined();
+        const png = Buffer.from(resized?.image.split(",")[1] ?? "", "base64");
+        // Frame metadata must describe the actual captured PNG, not just requested viewport dimensions.
+        expect(png.toString("ascii", 1, 4)).toBe("PNG");
+        expect(png.readUInt32BE(16)).toBe(333);
+        expect(png.readUInt32BE(20)).toBe(222);
       } finally {
         handle.close();
       }
