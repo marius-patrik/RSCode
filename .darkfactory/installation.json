@@ -4,12 +4,12 @@
   "slug": "marius-patrik/RSCode",
   "sourceBranch": "main",
   "release": {
-    "tag": "v0.292.2",
-    "sha": "a39c404923882070ad98720f5f789fe279fa932e",
-    "digest": "1e97f748cca22d1c239f6f0f2d25c5e70032bbb48cf75c1c477a2a4d445dd822"
+    "tag": "v0.292.3",
+    "sha": "fc5896c9ffbf9b1ac5762a271ec2b26ee0efafd4",
+    "digest": "ce2899a8ca2cc65b4baffedd7c2992be29e99f604a12ce59d752b0b363d262ca"
   },
   "fileHashes": {
-    "repo.dfconfig": "144c397317703219260fa69d05cb517a0b92589ee4670410a15f7b1f73de27fd",
-    ".github/workflows/darkfactory-control.yml": "c8754e25bdcf15a57d509a7d016f7584d8726171d8608282302e7ab31f37f358"
+    "repo.dfconfig": "88421a5c9d395225cda80fd1162ebaf9e1c59acac2f1cabd753573c9f27b18ee",
+    ".github/workflows/darkfactory-control.yml": "1e962c17c5c1da8e5f5b2a7679aeccb90be5ebfeb4fb4811290af8d7d5a3b266"
   }
 }
