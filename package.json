@@ -14,7 +14,7 @@
     "test": "bun test src",
     "test:browser": "bun test src/tests/browserService.test.ts",
     "test:ui": "CANVAS_UI_SMOKE=1 bun test src/tests/uiSmoke.test.ts",
-    "verify": "bun run typecheck && bun run lint && bun run build:web && bun test && bun run test:browser && bun run test:ui"
+    "verify": "bun run typecheck && bun run lint && bun run build:web && bun test && bun run test:browser && bun run build:web && bun run test:ui"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
