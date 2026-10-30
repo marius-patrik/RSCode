@@ -408,7 +408,7 @@ export class BrowserFrameService {
       if (actual?.width === viewport.width && actual.height === viewport.height) break;
       if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    if (actual?.width !== viewport.width || actual.height !== viewport.height) {
+    if (!actual || actual.width !== viewport.width || actual.height !== viewport.height) {
       throw new Error(
         `Chromium resize capture dimensions: expected ${viewport.width}x${viewport.height}, got ${actual ? `${actual.width}x${actual.height}` : "invalid PNG"}`,
       );
