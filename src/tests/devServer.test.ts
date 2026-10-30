@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +40,34 @@ test(
 
       const terminal = await terminalOutput(webPort, `terminal:dev-smoke:${Date.now()}`, "printf dev-terminal-ok\nexit\n");
       expect(terminal).toContain("dev-terminal-ok");
+      
+      // A remote website must never be able to create, delete or modify a local
+      // file through fetch, form POST, DNS rebinding or an image URL.
+      const target = join(canvasHome, "important.txt");
+      await writeFile(target, "preserve me");
+      const endpoint = `http://127.0.0.1:${apiPort}/api/fs.delete`;
+      const input = JSON.stringify({ path: target });
+      const viaGet = await fetch(`${endpoint}?input=${encodeURIComponent(input)}`);
+      expect(viaGet.status).toBe(405);
+      const viaForm = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: input,
+      });
+      expect(viaForm.status).toBe(415);
+      const viaCrossOrigin = await fetch(endpoint, {
+        method: "POST",
+        headers: { origin: "https://example.attacker.invalid", "content-type": "application/json" },
+        body: input,
+      });
+      expect(viaCrossOrigin.status).toBe(403);
+      expect(await readFile(target, "utf8")).toBe("preserve me");
+      const legitimate = await fetch(`http://127.0.0.1:${apiPort}/api/workspace.list`, {
+        method: "POST",
+        headers: { origin: `http://127.0.0.1:${webPort}`, "content-type": "application/json" },
+        body: "null",
+      });
+      expect(legitimate.ok).toBe(true);
     } finally {
       await stopProcess(proc);
     }
