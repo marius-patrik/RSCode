@@ -136,7 +136,7 @@ export function Dock({
           />
         ) : null}
 
-        <div className="mr-auto flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div className="mr-auto hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:flex">
           {workspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
             return (
@@ -175,19 +175,34 @@ export function Dock({
           </DockIconButton>
         </div>
 
+        <select
+          aria-label="Active workspace"
+          value={activeWorkspaceId ?? ""}
+          onChange={(event) => {
+            if (event.target.value === "__new__") onCreateWorkspace();
+            else onSwitchWorkspace(event.target.value);
+          }}
+          className="w-[72px] shrink-0 truncate rounded-md border border-border bg-[var(--control-bg)] px-1 py-1.5 text-[11px] text-foreground sm:hidden"
+        >
+          {workspaces.map((workspace) => (
+            <option key={workspace.id} value={workspace.id}>{workspace.label}</option>
+          ))}
+          <option value="__new__">+ New workspace</option>
+        </select>
         <div className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
           {quickActions.map((action) => {
             const item = commandById.get(action.id);
             const Icon = action.icon;
             return (
-              <DockIconButton
-                key={action.id}
-                title={item?.disabledReason ?? action.title}
-                onClick={() => runAction(action.id)}
-                disabled={!item || Boolean(item.disabledReason)}
-              >
-                <Icon className="h-4 w-4" />
-              </DockIconButton>
+              <span key={action.id} className={cn("inline-flex", action.id === "pane.open.repositories" || action.id === "pane.open.source-control" ? "hidden sm:inline-flex" : "")}>
+                <DockIconButton
+                  title={item?.disabledReason ?? action.title}
+                  onClick={() => runAction(action.id)}
+                  disabled={!item || Boolean(item.disabledReason)}
+                >
+                  <Icon className="h-4 w-4" />
+                </DockIconButton>
+              </span>
             );
           })}
         </div>
@@ -230,7 +245,7 @@ export function Dock({
           }}
           placeholder="Search files or web, / commands, > terminal"
           spellCheck={false}
-          className="w-[min(42vw,560px)] min-w-[240px] flex-none rounded-md border border-border bg-[var(--input-bg)] px-3 py-1.5 font-mono text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-md border border-border bg-[var(--input-bg)] px-2 py-1.5 font-mono text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring sm:w-[min(42vw,560px)] sm:min-w-[240px] sm:flex-none sm:px-3"
         />
         <div className="flex shrink-0 items-center gap-1 border-l border-border pl-2">
           <DockIconButton title={activeView === "panes" ? "Switch to canvas" : "Switch to panes"} onClick={onToggleView} active>

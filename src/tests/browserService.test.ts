@@ -34,15 +34,31 @@ test(
         expect(frames[0]?.mimeType).toBe("image/png");
         expect(frames[0]?.image.startsWith("data:image/png;base64,")).toBe(true);
 
-        await service.interact(session, { type: "viewport", width: 333, height: 222 });
-        await waitFor(() => frames.some((frame) => frame.width === 333 && frame.height === 222), "resized frame");
-        const resized = frames.find((frame) => frame.width === 333 && frame.height === 222);
-        expect(resized).toBeDefined();
-        const png = Buffer.from(resized?.image.split(",")[1] ?? "", "base64");
-        // Frame metadata must describe the actual captured PNG, not just requested viewport dimensions.
-        expect(png.toString("ascii", 1, 4)).toBe("PNG");
-        expect(png.readUInt32BE(16)).toBe(333);
-        expect(png.readUInt32BE(20)).toBe(222);
+        // Repeated small, large and small resizes must always produce truthful
+        // frame metadata and complete PNGs, even during compositor transitions.
+        for (const { width, height } of [
+          { width: 333, height: 222 },
+          { width: 500, height: 320 },
+          { width: 333, height: 222 },
+        ]) {
+          frames.length = 0;
+          await service.interact(session, { type: "viewport", width, height });
+          await waitFor(() => frames.some((frame) => frame.width === width && frame.height === height), "resized frame");
+          const resized = frames.find((frame) => frame.width === width && frame.height === height);
+          expect(resized).toBeDefined();
+          const png = Buffer.from(resized?.image.split(",")[1] ?? "", "base64");
+          expect(png.toString("ascii", 1, 4)).toBe("PNG");
+          expect(png.readUInt32BE(16)).toBe(width);
+          expect(png.readUInt32BE(20)).toBe(height);
+
+          // Screencast frames can arrive while the viewport changes; their
+          // reported dimensions must match the encoded image, too.
+          for (const frame of frames) {
+            const actual = Buffer.from(frame.image.split(",")[1] ?? "", "base64");
+            expect(actual.readUInt32BE(16)).toBe(frame.width);
+            expect(actual.readUInt32BE(20)).toBe(frame.height);
+          }
+        }
       } finally {
         handle.close();
       }
