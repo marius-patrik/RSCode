@@ -336,7 +336,7 @@ export function Canvas({
     ],
   );
 
-  const closePane = useCallback(
+  const closePaneNow = useCallback(
     (paneId: string) => {
       const nextPanes = workspace.panes.filter((pane) => pane.id !== paneId);
       const tiledLayout = removePaneFromLayout(workspace.tiledLayout, paneId);
@@ -350,6 +350,25 @@ export function Canvas({
       });
     },
     [updateWorkspace, workspace.activePaneId, workspace.panes, workspace.tiledLayout],
+  );
+
+  const closePane = useCallback(
+    (paneId: string) => {
+      const pane = workspace.panes.find((candidate) => candidate.id === paneId);
+      if (pane?.type === "editor" && pane.dirty) {
+        setModal({
+          kind: "confirm",
+          title: "Discard unsaved changes?",
+          message: `Your edits to ${pane.title} have not been saved to disk.`,
+          confirmLabel: "Discard changes",
+          destructive: true,
+          onConfirm: () => closePaneNow(paneId),
+        });
+        return;
+      }
+      closePaneNow(paneId);
+    },
+    [closePaneNow, workspace.panes],
   );
 
   const addPaneTab = useCallback(
@@ -1226,8 +1245,17 @@ function HeaderButton({ title, onClick, children }: { title: string; onClick: ()
 function NativeModal({ request, onClose }: { request: WorkspaceModalRequest; onClose: () => void }) {
   const [value, setValue] = useState(request.kind === "prompt" ? request.defaultValue : "");
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/80" data-context-menu>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/80" data-context-menu role="presentation">
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-label={request.title}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
         className="w-[420px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-[var(--panel-bg)] p-4 shadow-xl backdrop-blur-xl"
         onSubmit={(event) => {
           event.preventDefault();
@@ -1253,6 +1281,7 @@ function NativeModal({ request, onClose }: { request: WorkspaceModalRequest; onC
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
+            autoFocus
             onClick={onClose}
             className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
