@@ -46,6 +46,12 @@ uiSmoke(
       await page.screenshot({ path: join(snapshotDir, "desktop.png"), fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
       await launcher.waitFor({ state: "visible" });
+      const settingsButton = page.locator('button[title="Settings"]').last();
+      const settingsBounds = await settingsButton.boundingBox();
+      expect(settingsBounds).not.toBeNull();
+      expect((settingsBounds?.x ?? 9999) + (settingsBounds?.width ?? 9999)).toBeLessThanOrEqual(390);
+      const workspacePicker = page.getByLabel("Active workspace");
+      await workspacePicker.waitFor({ state: "visible" });
       await page.screenshot({ path: join(snapshotDir, "mobile.png"), fullPage: true });
       expect(errors).toEqual([]);
     } finally {
