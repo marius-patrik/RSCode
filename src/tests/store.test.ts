@@ -44,13 +44,13 @@ test("creates and persists an initial workspace", async () => {
 
 test("creating an existing file never destroys its contents", async () => {
   const file = join(canvasHome, "important.md");
-  await writeFile(file, "important original contents\\n");
+  await writeFile(file, "important original contents\n");
   await expect(createFsFile(file, "markdown")).rejects.toThrow();
-  expect(await readFile(file, "utf8")).toBe("important original contents\\n");
+  expect(await readFile(file, "utf8")).toBe("important original contents\n");
 
   const created = join(canvasHome, "new.md");
   expect(await createFsFile(created, "markdown")).toBe(created);
-  expect(await readFile(created, "utf8")).toBe("# untitled\\n");
+  expect(await readFile(created, "utf8")).toBe("# untitled\n");
 });
 
 test("workspace persistence produces valid JSON without orphan temporary writes", async () => {
