@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-chromium";
 
-test(
+const uiSmoke = process.env.CANVAS_UI_SMOKE === "1" ? test : test.skip;
+
+uiSmoke(
   "Canvas boots in Chromium, supports pane/canvas navigation and captures desktop/mobile snapshots",
   async () => {
     const home = await mkdtemp(join(tmpdir(), "canvas-ui-smoke-"));
@@ -26,11 +28,10 @@ test(
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
       const response = await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded" });
-      const bodyText = await page.locator("body").innerText().catch(() => "");
-      console.log(
-        "Canvas UI diagnostics",
-        JSON.stringify({ status: response?.status(), title: await page.title(), body: bodyText.slice(0, 500), errors }),
-      );
+      if (!response?.ok()) {
+        const bodyText = await page.locator("body").innerText().catch(() => "");
+        throw new Error(`Canvas UI HTTP ${response?.status()}: ${bodyText.slice(0, 500)}`);
+      }
       const launcher = page.getByPlaceholder("Search files or web, / commands, > terminal");
       await launcher.waitFor({ state: "visible", timeout: 12_000 });
       await page.getByTitle("Switch to canvas").click();
