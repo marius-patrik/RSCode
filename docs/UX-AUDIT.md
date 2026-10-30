@@ -6,9 +6,9 @@ Scope: existing local Bun/React application, not the unrelated static repository
 
 ## Evidence and method
 
-Source inspection: `src/client/{Canvas,App,Dock,ActionsMenu,BrowserPane,FilePanes,MonacoEditor,TerminalNode}.tsx`, `src/client/paneLayout.ts`, `src/server/{server,store,browserService}.ts`, and existing Bun tests. Focused integration checks are added under `src/tests/` and run on GitHub-hosted Chromium. Screenshots are uploaded as workflow artifacts.
+Source inspection: `src/client/{Canvas,App,Dock,ActionsMenu,BrowserPane,FilePanes,MonacoEditor,TerminalNode}.tsx`, `src/client/paneLayout.ts`, `src/server/{server,store,browserService}.ts`, and existing Bun tests. Focused integration checks are added under `src/tests/` and run on GitHub-hosted Chromium. Captured 1280×800 and 390×844 screenshots were visually inspected. The first mobile capture exposed bottom-dock overflow, which has since been addressed and given a viewport assertion.
 
-**Limit:** Source inspection and browser smoke assertions are not a substitute for human review of the captured interface. No desktop device or interactive cloud-browser session was available for a manual visual walkthrough.
+**Limit:** Source inspection and screenshot review are not equivalent to a manual interactive walkthrough. No connected desktop or cloud-browser control session was available to exercise complex gestures, keyboard navigation and platform-specific behavior.
 
 ## Findings and status
 
@@ -18,7 +18,8 @@ Source inspection: `src/client/{Canvas,App,Dock,ActionsMenu,BrowserPane,FilePane
 | High | File explorer | `createFsFile` used default truncating file writes, silently replacing an existing file | Use exclusive create (`wx`); preservation regression test |
 | High | Workspace persistence | JSON workspace/index writes truncated files in place; crashes could corrupt saved state | Write unique sibling temporary file then atomically rename |
 | High | Editor pane | Closing a dirty editor immediately removed its unsaved draft | Require explicit destructive confirmation before closing |
-| Medium | Context menu | At small window sizes menu coordinates could become negative and menu could escape viewport | Clamp to viewport; responsive maximum size; keyboard-friendly dialog semantics |
+| Medium | Context menu | At small window sizes menu coordinates could become negative and menu could escape viewport | Clamp to viewport; responsive maximum size; filter input accessible name |
+| High | Mobile dock | 390px screenshot showed the search field and view/settings actions clipped by an overwide bottom dock | Compact workspace picker, hide secondary quick actions, flexible search field; visible-settings assertion |
 | Medium | Monaco | Editor always forced `vs-dark` despite light workspace themes | Synchronize editor theme with applied workspace theme |
 | Medium | Browser frame | Resized frame metadata did not necessarily match PNG pixels | Fixed in PR #17 and verified by Chromium regressions |
 | Medium | Visual regression coverage | Previous suite checked APIs but never launched the actual desktop UI | New Playwright Chromium startup/navigation smoke + desktop/mobile snapshots |
