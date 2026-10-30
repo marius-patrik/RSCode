@@ -75,8 +75,7 @@ export function ActionsMenu({
   // or bottom; clamp inside the viewport.
   const winW = typeof window !== "undefined" ? window.innerWidth : 1200;
   const winH = typeof window !== "undefined" ? window.innerHeight : 800;
-  const left = Math.min(x, winW - 320);
-  const top = Math.min(y, winH - 480);
+  const { left, top } = contextMenuPosition(x, y, winW, winH);
 
   // Track running index across groups so highlight points to the right item.
   let runningIdx = -1;
@@ -84,8 +83,10 @@ export function ActionsMenu({
   return (
     <div
       data-context-menu
+      role="dialog"
+      aria-label={title}
       style={{ left, top }}
-      className="fixed z-50 flex w-[280px] max-h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
+      className="fixed z-50 flex w-[min(280px,calc(100vw-16px))] max-h-[min(480px,calc(100vh-16px))] flex-col overflow-hidden rounded-lg border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-1.5 border-b border-border bg-secondary px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">
@@ -93,6 +94,7 @@ export function ActionsMenu({
       </div>
       <input
         ref={inputRef}
+        aria-label="Filter actions"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -160,4 +162,15 @@ export function ActionsMenu({
       </div>
     </div>
   );
+}
+
+/** Keep the context menu fully visible on small displays and at screen edges. */
+export function contextMenuPosition(x: number, y: number, viewportWidth: number, viewportHeight: number) {
+  const margin = 8;
+  const width = Math.min(280, Math.max(0, viewportWidth - margin * 2));
+  const height = Math.min(480, Math.max(0, viewportHeight - margin * 2));
+  return {
+    left: Math.max(margin, Math.min(x, viewportWidth - width - margin)),
+    top: Math.max(margin, Math.min(y, viewportHeight - height - margin)),
+  };
 }
