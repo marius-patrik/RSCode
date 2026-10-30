@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lookupHandler } from "@/server/api";
 import type { AppContext } from "@/server/api";
-import { CanvasStore } from "@/server/store";
+import { CanvasStore, createFsFile } from "@/server/store";
 import { INTERNAL_BLANK_BROWSER_URL } from "@/shared/browser";
 import { type BrowserPaneState, DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace } from "@/shared/schema";
 
@@ -40,6 +40,28 @@ test("creates and persists an initial workspace", async () => {
     expect(active.tiledLayout.paneIds).toEqual([active.panes[0]!.id]);
     expect(active.tiledLayout.activePaneId).toBe(active.panes[0]!.id);
   }
+});
+
+test("creating an existing file never destroys its contents", async () => {
+  const file = join(canvasHome, "important.md");
+  await writeFile(file, "important original contents\\n");
+  await expect(createFsFile(file, "markdown")).rejects.toThrow();
+  expect(await readFile(file, "utf8")).toBe("important original contents\\n");
+
+  const created = join(canvasHome, "new.md");
+  expect(await createFsFile(created, "markdown")).toBe(created);
+  expect(await readFile(created, "utf8")).toBe("# untitled\\n");
+});
+
+test("workspace persistence produces valid JSON without orphan temporary writes", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const original = await store.getActiveWorkspace();
+  await store.saveWorkspace({ ...original, label: "After restart" });
+  const reloaded = new CanvasStore();
+  expect((await reloaded.getActiveWorkspace()).label).toBe("After restart");
+  const names = await readdir(join(canvasHome, "workspaces"));
+  expect(names.filter((name) => name.endsWith(".tmp"))).toEqual([]);
 });
 
 test("switches, saves, and closes workspaces", async () => {
