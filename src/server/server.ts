@@ -9,7 +9,6 @@ import { CanvasStore } from "@/server/store";
 import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
@@ -20,15 +19,6 @@ async function logLine(path: string, line: string) {
 }
 
 async function readBody(request: Request): Promise<unknown> {
-  if (request.method === "GET") {
-    const q = new URL(request.url).searchParams.get("input");
-    if (!q) return undefined;
-    try {
-      return JSON.parse(q);
-    } catch {
-      return undefined;
-    }
-  }
   const text = await request.text();
   if (!text) return undefined;
   try {
@@ -44,6 +34,14 @@ async function dispatchApi(
   request: Request,
   logPath: string,
 ): Promise<Response> {
+  // Every API call uses JSON POST (including reads). In particular, GET
+  // must never be able to delete a file through an image/script URL.
+  if (request.method !== "POST") {
+    return Response.json({ error: "API requests require POST" }, { status: 405, headers: CORS_HEADERS });
+  }
+  if (request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+    return Response.json({ error: "API requests require application/json" }, { status: 415, headers: CORS_HEADERS });
+  }
   const handler = lookupHandler(path);
   if (!handler) {
     return Response.json({ error: `unknown api path: ${path}` }, { status: 404, headers: CORS_HEADERS });
@@ -65,6 +63,30 @@ async function dispatchApi(
     void logLine(logPath, `[${new Date().toISOString()}] api:${path} ${message}`);
     return Response.json({ error: message, path }, { status: 500, headers: CORS_HEADERS });
   }
+}
+
+export function isTrustedLocalRequest(request: Request): boolean {
+  const host = request.headers.get("host");
+  if (!host) return false;
+  try {
+    const authority = new URL(`http://${host}`);
+    if (!isLoopbackHostname(authority.hostname)) return false;
+    const origin = request.headers.get("origin");
+    if (!origin) return true; // Local CLI clients do not send an Origin header.
+    const parsedOrigin = new URL(origin);
+    return (
+      (parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:") &&
+      isLoopbackHostname(parsedOrigin.hostname) &&
+      !parsedOrigin.username &&
+      !parsedOrigin.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
 }
 
 export async function startServer() {
@@ -120,6 +142,12 @@ export async function startServer() {
     port: getServicePort(),
     hostname: "127.0.0.1",
     async fetch(request, srv) {
+      // The local filesystem, terminals and browser profiles are privileged.
+      // Reject remote website origins and DNS-rebinding hostnames before
+      // responding to CORS preflights, HTTP requests or WebSocket upgrades.
+      if (!isTrustedLocalRequest(request)) {
+        return new Response("Forbidden origin or host", { status: 403 });
+      }
       const url = new URL(request.url);
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: CORS_HEADERS });

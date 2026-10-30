@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { browserStoredUrl } from "@/shared/browser";
 import { getPaths } from "@/shared/paths";
@@ -46,7 +47,15 @@ async function readJson<T>(path: string): Promise<T | null> {
 
 async function writeJson(path: string, data: unknown) {
   await ensureDir(dirname(path));
-  await writeFile(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  // A killed process must not leave a partially written workspace or index.
+  // The temporary file is a sibling, so rename is atomic on the same volume.
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(data, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
 function now() {
@@ -127,7 +136,8 @@ export async function createFsFile(
   const abs = safeAbsolute(absPath);
   if (abs === "/") throw new Error("refusing to create file at filesystem root");
   await ensureDir(dirname(abs));
-  await writeFile(abs, seed[kind], "utf8");
+  // New-file creation must not truncate an existing user file.
+  await writeFile(abs, seed[kind], { encoding: "utf8", flag: "wx" });
   return abs;
 }
 

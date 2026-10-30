@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 
 // Lazy wrapper around @monaco-editor/react. The editor pulls in a ~3 MB
 // worker bundle, so we keep it out of the main chunk and load it on
@@ -21,6 +21,18 @@ export function MonacoEditor({
   onChange?: (next: string) => void;
   readOnly?: boolean;
 }) {
+  const [theme, setTheme] = useState<"vs-dark" | "light">(() =>
+    typeof document !== "undefined" && !document.documentElement.classList.contains("dark") ? "light" : "vs-dark",
+  );
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setTheme(root.classList.contains("dark") ? "vs-dark" : "light");
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Suspense
       fallback={
@@ -33,7 +45,7 @@ export function MonacoEditor({
         height={height}
         defaultLanguage={language}
         value={value}
-        theme="vs-dark"
+        theme={theme}
         onChange={(v) => onChange?.(v ?? "")}
         options={{
           readOnly,

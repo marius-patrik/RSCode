@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { contextMenuPosition } from "@/client/ActionsMenu";
 import {
   addPaneToLayoutTab,
   insertPaneIntoLayout,
@@ -67,6 +68,12 @@ test("tab insertion stays visible when requested target is not tiled", () => {
   if (next.first.type !== "leaf" || next.second.type !== "leaf") return;
   expect(leafPaneIds(next.first)).toEqual(["visible"]);
   expect(leafPaneIds(next.second)).toEqual(["new-tab"]);
+});
+
+test("context menu placement stays inside narrow and desktop viewports", () => {
+  expect(contextMenuPosition(390, 850, 390, 844)).toEqual({ left: 102, top: 356 });
+  expect(contextMenuPosition(-100, -100, 200, 240)).toEqual({ left: 8, top: 8 });
+  expect(contextMenuPosition(1180, 760, 1200, 800)).toEqual({ left: 912, top: 312 });
 });
 
 function leaf(paneId: string): Extract<TiledLayoutNode, { type: "leaf" }> {
