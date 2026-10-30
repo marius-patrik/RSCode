@@ -113,10 +113,6 @@ type LiveBrowser = {
 type ScreencastEvent = {
   data: string;
   sessionId: number;
-  metadata?: {
-    deviceWidth?: number;
-    deviceHeight?: number;
-  };
 };
 
 const DEFAULT_VIEWPORT: BrowserViewport = { width: 1280, height: 720, deviceScaleFactor: 1 };
@@ -338,21 +334,26 @@ export class BrowserFrameService {
   }
 
   private async handleScreencastFrame(live: LiveBrowser, event: ScreencastEvent): Promise<void> {
-    const width = positiveInt(event.metadata?.deviceWidth) ?? live.viewport.width;
-    const height = positiveInt(event.metadata?.deviceHeight) ?? live.viewport.height;
-    const frame: BrowserFrameMessage = {
-      type: "frame",
-      url: browserStoredUrl(live.page.url()),
-      image: `data:image/png;base64,${event.data}`,
-      mimeType: "image/png",
-      renderer: "chromium",
-      width,
-      height,
-      ts: Date.now(),
-    };
-    live.currentUrl = live.page.url();
-    live.lastFrame = frame;
     try {
+      // Chromium's screencast metadata may describe a requested viewport while
+      // its encoded PNG still contains an older compositor surface.
+      const dimensions = pngDimensions(event.data);
+      if (!dimensions) {
+        await this.log("browser chromium screencast produced an invalid PNG frame");
+        return;
+      }
+      const frame: BrowserFrameMessage = {
+        type: "frame",
+        url: browserStoredUrl(live.page.url()),
+        image: `data:image/png;base64,${event.data}`,
+        mimeType: "image/png",
+        renderer: "chromium",
+        width: dimensions.width,
+        height: dimensions.height,
+        ts: Date.now(),
+      };
+      live.currentUrl = live.page.url();
+      live.lastFrame = frame;
       await this.broadcast(live, frame);
     } finally {
       await live.cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(async (error) => {
@@ -390,22 +391,36 @@ export class BrowserFrameService {
       mobile: false,
     });
 
-    // CDP does not guarantee a fresh screencastFrame for an otherwise static page
-    // when its viewport changes. Capture a post-resize frame explicitly so all
-    // subscribers observe the new dimensions without waiting for a repaint.
-    const { data } = (await live.cdp.send("Page.captureScreenshot", {
-      format: "png",
-      captureBeyondViewport: false,
-      fromSurface: true,
-    })) as { data: string };
+    // Force the requested capture rectangle; Chromium can temporarily expose
+    // a shorter compositor surface immediately after a viewport resize.
+    // Never publish claimed dimensions unless the PNG actually matches them.
+    let data = "";
+    let actual: { width: number; height: number } | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = (await live.cdp.send("Page.captureScreenshot", {
+        format: "png",
+        captureBeyondViewport: true,
+        fromSurface: true,
+        clip: { x: 0, y: 0, width: viewport.width, height: viewport.height, scale: 1 },
+      })) as { data: string };
+      data = result.data;
+      actual = pngDimensions(data);
+      if (actual?.width === viewport.width && actual.height === viewport.height) break;
+      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (actual?.width !== viewport.width || actual.height !== viewport.height) {
+      throw new Error(
+        `Chromium resize capture dimensions: expected ${viewport.width}x${viewport.height}, got ${actual ? `${actual.width}x${actual.height}` : "invalid PNG"}`,
+      );
+    }
     const frame: BrowserFrameMessage = {
       type: "frame",
       url: browserStoredUrl(live.page.url()),
       image: `data:image/png;base64,${data}`,
       mimeType: "image/png",
       renderer: "chromium",
-      width: viewport.width,
-      height: viewport.height,
+      width: actual.width,
+      height: actual.height,
       ts: Date.now(),
     };
     live.currentUrl = live.page.url();
@@ -631,9 +646,19 @@ function isMainFrame(page: Page, frame: Frame): boolean {
   return frame === page.mainFrame();
 }
 
-function positiveInt(value: number | undefined): number | null {
-  if (!Number.isFinite(value) || value === undefined || value <= 0) return null;
-  return Math.floor(value);
+function pngDimensions(base64: string): { width: number; height: number } | null {
+  // The first 32 base64 characters cover the PNG signature and IHDR dimensions.
+  const header = Buffer.from(base64.slice(0, 32), "base64");
+  if (
+    header.length < 24 ||
+    header.toString("hex", 0, 8) !== "89504e470d0a1a0a" ||
+    header.toString("ascii", 12, 16) !== "IHDR"
+  ) {
+    return null;
+  }
+  const width = header.readUInt32BE(16);
+  const height = header.readUInt32BE(20);
+  return width > 0 && height > 0 ? { width, height } : null;
 }
 
 function clamp(value: number, min: number, max: number): number {
