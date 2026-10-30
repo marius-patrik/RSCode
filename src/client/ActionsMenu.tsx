@@ -83,7 +83,7 @@ export function ActionsMenu({
   return (
     <div
       data-context-menu
-      role="dialog"
+      role="group"
       aria-label={title}
       style={{ left, top }}
       className="fixed z-50 flex w-[min(280px,calc(100vw-16px))] max-h-[min(480px,calc(100vh-16px))] flex-col overflow-hidden rounded-lg border border-border bg-[var(--panel-bg)] shadow-xl backdrop-blur-xl"
