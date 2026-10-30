@@ -81,3 +81,13 @@ bun test src
 bun run test:browser
 bun run verify
 ```
+
+## Preview release and validation
+
+The first release is a local-only v0.1.0 preview; it provides the source and built web UI, not native installers or an internet-facing service. See [release notes](./RELEASE_NOTES.md) and the [readiness audit](./UX-AUDIT.md).
+
+The verification workflow runs a real Chromium startup smoke and uploads `canvas-visual-smoke` artifacts with desktop and compact-viewport screenshots. These automated captures do not replace hands-on review of editor, browser, terminal, filesystem or mobile ergonomics.
+
+Canvas accepts privileged API requests only on loopback hosts, rejects external web origins and requires JSON POST for all `/api/*` actions. Do not reverse-proxy or expose Canvas publicly; no remote-user authentication system is implemented.
+
+The initial `v0.1.0` release workflow verifies the entire application after a merge to `main`, then publishes an immutable preview tag and source/web bundle. Later pushes skip this one-time workflow once that tag exists.
