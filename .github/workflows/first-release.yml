@@ -50,7 +50,8 @@ jobs:
           cp -R docs scripts src out/canvas-v0.1.0/
           cp -R dist/web out/canvas-v0.1.0/dist/
           tar -czf canvas-v0.1.0-source-web.tar.gz -C out canvas-v0.1.0
-          tar -tzf canvas-v0.1.0-source-web.tar.gz | grep -q 'canvas-v0.1.0/dist/web/index.html'
+          tar -tzf canvas-v0.1.0-source-web.tar.gz > out/package-contents.txt
+          grep -q 'canvas-v0.1.0/dist/web/index.html' out/package-contents.txt
       - name: Publish immutable initial preview
         if: steps.version.outputs.skip != 'true'
         env:
