@@ -1244,12 +1244,11 @@ function HeaderButton({ title, onClick, children }: { title: string; onClick: ()
 
 function NativeModal({ request, onClose }: { request: WorkspaceModalRequest; onClose: () => void }) {
   const [value, setValue] = useState(request.kind === "prompt" ? request.defaultValue : "");
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { cancelRef.current?.focus(); }, []);
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/80" data-context-menu role="presentation">
+    <dialog open aria-label={request.title} className="fixed inset-0 z-[80] m-0 flex h-screen w-screen max-h-none max-w-none items-center justify-center border-0 bg-background/80 p-0" data-context-menu>
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-label={request.title}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
@@ -1281,7 +1280,7 @@ function NativeModal({ request, onClose }: { request: WorkspaceModalRequest; onC
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
-            autoFocus
+            ref={cancelRef}
             onClick={onClose}
             className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
@@ -1300,7 +1299,7 @@ function NativeModal({ request, onClose }: { request: WorkspaceModalRequest; onC
           </button>
         </div>
       </form>
-    </div>
+    </dialog>
   );
 }
 
