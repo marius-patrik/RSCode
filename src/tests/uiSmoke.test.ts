@@ -25,7 +25,12 @@ test(
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
-      await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded" });
+      const response = await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded" });
+      const bodyText = await page.locator("body").innerText().catch(() => "");
+      console.log(
+        "Canvas UI diagnostics",
+        JSON.stringify({ status: response?.status(), title: await page.title(), body: bodyText.slice(0, 500), errors }),
+      );
       const launcher = page.getByPlaceholder("Search files or web, / commands, > terminal");
       await launcher.waitFor({ state: "visible", timeout: 12_000 });
       await page.getByTitle("Switch to canvas").click();
