@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -61,6 +62,88 @@ test(
         body: input,
       });
       expect(viaCrossOrigin.status).toBe(403);
+      const viaSiblingOrigin = await fetch(endpoint, {
+        method: "POST",
+        headers: { origin: "http://localhost:7123", "content-type": "application/json" },
+        body: input,
+      });
+      expect(viaSiblingOrigin.status).toBe(403);
+      expect(await readFile(target, "utf8")).toBe("preserve me");
+
+      const badJson = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      });
+      expect(badJson.status).toBe(400);
+      const badArguments = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(badArguments.status).toBe(400);
+      const oversized = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "x".repeat(16 * 1024 * 1024 + 1),
+      });
+      expect(oversized.status).toBe(413);
+      const missingPath = join(canvasHome, "sensitive-not-found.txt");
+      const missingFile = await fetch(`http://127.0.0.1:${apiPort}/api/fs.readFile`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: missingPath }),
+      });
+      expect(missingFile.status).toBe(500);
+      expect(await missingFile.text()).not.toContain(missingPath);
+
+      // Raw WebSocket handshakes exercise the actual HTTP upgrade gate rather
+      // than relying on a browser client that may normalize Origin headers.
+      const terminalRoute = "/api/terminal/spawn?paneId=untrusted";
+      const browserRoute = "/api/browser/stream?workspaceId=x&paneId=y";
+      expect(await websocketUpgradeStatus(apiPort, terminalRoute, "http://localhost:7123")).toBe(403);
+      expect(await websocketUpgradeStatus(apiPort, browserRoute, "https://attacker.invalid")).toBe(403);
+      expect(await websocketUpgradeStatus(apiPort, terminalRoute, `http://127.0.0.1:${webPort}`)).toBe(101);
+
+      // The IPv6 loopback listener can use the SAME numeric port as the IPv4
+      // service. Both privileged WebSocket endpoints must reject its Origin.
+      for (const route of [terminalRoute, browserRoute]) {
+        for (const origin of [
+          `http://[::1]:${apiPort}`,
+          `http://localhost:${apiPort}`,
+          `http://[::1]:${webPort}`,
+          `http://localhost:${webPort}`,
+          "null",
+          `http://127.0.0.1:${apiPort}/path`,
+          `http://127.0.0.1:${webPort + 100}`,
+          "not-an-origin",
+        ]) {
+          expect(await websocketUpgradeStatus(apiPort, route, origin)).toBe(403);
+        }
+        expect(await websocketUpgradeStatus(apiPort, route, `http://127.0.0.1:${webPort}`)).toBe(101);
+        expect(await websocketUpgradeStatus(apiPort, route)).toBe(101); // originless CLI
+        expect(await websocketUpgradeStatus(apiPort, route, `http://127.0.0.1:${webPort}`, `localhost:${apiPort}`)).toBe(403);
+        expect(await websocketUpgradeStatus(apiPort, route, `http://127.0.0.1:${webPort}`, `[::1]:${apiPort}`)).toBe(403);
+      }
+
+      // HTTP must use the same first-party authority contract, even if the
+      // forged Host is on another loopback address or DNS-rebinding hostname.
+      expect(await httpStatus(apiPort, `127.0.0.1:${apiPort}`, `http://127.0.0.1:${apiPort}`)).toBe(200);
+      expect(await httpStatus(apiPort, `127.0.0.1:${webPort}`, `http://127.0.0.1:${webPort}`)).toBe(200);
+      expect(await httpStatus(apiPort, `127.0.0.1:${apiPort}`)).toBe(200);
+      for (const origin of [`http://[::1]:${apiPort}`, `http://localhost:${apiPort}`, `http://[::1]:${webPort}`]) {
+        expect(await httpStatus(apiPort, `127.0.0.1:${apiPort}`, origin)).toBe(403);
+      }
+      for (const host of [`localhost:${apiPort}`, `[::1]:${apiPort}`, `evil.invalid:${apiPort}`]) {
+        expect(await httpStatus(apiPort, host, `http://127.0.0.1:${apiPort}`)).toBe(403);
+      }
+
+      const privateWorkspacePath = "/private/rscode-sensitive-browser-session";
+      const errors = await browserCommandErrors(apiPort, privateWorkspacePath);
+      expect(errors).toContain("browser stream unavailable");
+      expect(errors).toContain("browser navigation failed");
+      expect(errors).toContain("browser interaction failed");
+      expect(errors.join(" ")).not.toContain(privateWorkspacePath);
       expect(await readFile(target, "utf8")).toBe("preserve me");
       const legitimate = await fetch(`http://127.0.0.1:${apiPort}/api/workspace.list`, {
         method: "POST",
@@ -160,5 +243,86 @@ function freePort(): Promise<number> {
       const { port } = address;
       server.close(() => resolve(port));
     });
+  });
+}
+
+async function websocketUpgradeStatus(
+  port: number, path: string, origin?: string, host = `127.0.0.1:${port}`,
+): Promise<number> {
+  return rawHttpStatus(port, [
+    `GET ${path} HTTP/1.1`,
+    `Host: ${host}`,
+    "Upgrade: websocket",
+    "Connection: Upgrade",
+    `Sec-WebSocket-Key: ${randomBytes(16).toString("base64")}`,
+    "Sec-WebSocket-Version: 13",
+    ...(origin === undefined ? [] : [`Origin: ${origin}`]),
+  ]);
+}
+
+async function httpStatus(port: number, host: string, origin?: string): Promise<number> {
+  return rawHttpStatus(port, [
+    "GET /health HTTP/1.1",
+    `Host: ${host}`,
+    "Connection: close",
+    ...(origin === undefined ? [] : [`Origin: ${origin}`]),
+  ]);
+}
+
+function rawHttpStatus(port: number, headers: string[]): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("HTTP handshake timed out"));
+    }, 4_000);
+    socket.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    socket.once("connect", () => {
+      socket.write([...headers, "", ""].join("\r\n"));
+    });
+    socket.once("data", (data) => {
+      clearTimeout(timer);
+      const status = /HTTP\/1\.1 (\d{3})/.exec(data.toString("utf8"));
+      socket.destroy();
+      if (!status) reject(new Error("invalid HTTP status"));
+      else resolve(Number(status[1]));
+    });
+  });
+}
+
+function browserCommandErrors(port: number, workspaceId: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/browser/stream?workspaceId=${encodeURIComponent(workspaceId)}&paneId=missing`,
+    );
+    const messages: string[] = [];
+    let settled = false;
+    const timer = setTimeout(() => {
+      ws.close();
+      if (!settled) reject(new Error(`browser errors timed out: ${messages.join(", ")}`));
+    }, 5_000);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "navigate", url: "about:blank" }));
+      ws.send(JSON.stringify({ type: "viewport", width: 500, height: 320 }));
+    };
+    ws.onmessage = (event) => {
+      const payload = JSON.parse(messageText(event.data)) as { type?: string; message?: string };
+      if (payload.type === "error" && typeof payload.message === "string") messages.push(payload.message);
+      if (messages.length === 3 && !settled) {
+        settled = true;
+        clearTimeout(timer);
+        ws.close();
+        resolve(messages);
+      }
+    };
+    ws.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`browser websocket error: ${messages.join(", ")}`));
+    };
   });
 }

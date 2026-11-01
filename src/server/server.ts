@@ -7,11 +7,19 @@ import { BrowserFrameService, type BrowserInteractionMessage, type BrowserStream
 import { serveWebAsset } from "@/server/static";
 import { CanvasStore } from "@/server/store";
 import { getPaths, getServicePort, getServiceUrl } from "@/shared/paths";
+import { ZodError } from "zod";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type",
 };
+
+const MAX_JSON_BODY_BYTES = 16 * 1024 * 1024;
+const MAX_BROWSER_MESSAGE_BYTES = 16 * 1024 * 1024;
+const MAX_TERMINAL_MESSAGE_BYTES = 128 * 1024;
+const MAX_PENDING_TERMINAL_MESSAGES = 16;
+
+class PayloadTooLarge extends Error {}
 
 async function logLine(path: string, line: string) {
   await mkdir(dirname(path), { recursive: true });
@@ -19,13 +27,29 @@ async function logLine(path: string, line: string) {
 }
 
 async function readBody(request: Request): Promise<unknown> {
-  const text = await request.text();
-  if (!text) return undefined;
+  // A Content-Length check alone is insufficient: chunked requests can omit it.
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (contentLength > MAX_JSON_BODY_BYTES) throw new PayloadTooLarge("JSON request too large");
+  if (!request.body) return undefined;
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
   try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_JSON_BODY_BYTES) {
+        await reader.cancel();
+        throw new PayloadTooLarge("JSON request too large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
   }
+  if (bytes === 0) return undefined;
+  return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
 }
 
 async function dispatchApi(
@@ -50,43 +74,45 @@ async function dispatchApi(
   try {
     input = await readBody(request);
   } catch (error) {
+    const status = error instanceof PayloadTooLarge ? 413 : 400;
     return Response.json(
-      { error: `invalid input json: ${(error as Error).message}` },
-      { status: 400, headers: CORS_HEADERS },
+      { error: status === 413 ? "JSON request too large" : "invalid JSON request body" },
+      { status, headers: CORS_HEADERS },
     );
   }
   try {
     const result = await handler(ctx, input);
     return Response.json(result, { headers: CORS_HEADERS });
   } catch (error) {
+    if (error instanceof ZodError) {
+      return Response.json({ error: "invalid API arguments" }, { status: 400, headers: CORS_HEADERS });
+    }
     const message = error instanceof Error ? error.message : String(error);
-    void logLine(logPath, `[${new Date().toISOString()}] api:${path} ${message}`);
-    return Response.json({ error: message, path }, { status: 500, headers: CORS_HEADERS });
+    void logLine(logPath, `[${new Date().toISOString()}] api:${path} ${message.replace(/[\r\n]/g, " ").slice(0, 1000)}`);
+    // Store and OS exceptions can contain private filesystem paths or command output.
+    return Response.json({ error: "API operation failed" }, { status: 500, headers: CORS_HEADERS });
   }
 }
 
-export function isTrustedLocalRequest(request: Request): boolean {
-  const host = request.headers.get("host");
-  if (!host) return false;
-  try {
-    const authority = new URL(`http://${host}`);
-    if (!isLoopbackHostname(authority.hostname)) return false;
-    const origin = request.headers.get("origin");
-    if (!origin) return true; // Local CLI clients do not send an Origin header.
-    const parsedOrigin = new URL(origin);
-    return (
-      (parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:") &&
-      isLoopbackHostname(parsedOrigin.hostname) &&
-      !parsedOrigin.username &&
-      !parsedOrigin.password
-    );
-  } catch {
-    return false;
-  }
-}
+export function isTrustedLocalRequest(
+  request: Request,
+  servicePort = getServicePort(),
+  devWebPort = Number(process.env.CANVAS_DEV_WEB_PORT),
+): boolean {
+  // Browser origins are security principals, not interchangeable loopback addresses.
+  // The service binds to 127.0.0.1; an unrelated process can serve [::1] on
+  // the *same port*. Trust only the exact first-party authority and dev proxy.
+  const validPort = (port: number) => Number.isInteger(port) && port >= 1 && port <= 65535;
+  if (!validPort(servicePort)) return false;
+  const authorities = [`127.0.0.1:${servicePort}`];
+  if (validPort(devWebPort)) authorities.push(`127.0.0.1:${devWebPort}`);
+  if (!authorities.includes(request.headers.get("host") ?? "")) return false;
 
-function isLoopbackHostname(hostname: string): boolean {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+  const origin = request.headers.get("origin");
+  if (origin === null) return true; // Intentional originless local CLI access.
+  // Exact serialized-origin matching excludes IPv6/localhost aliases, DNS
+  // rebinding, malformed URLs, user-info, paths, fragments and extra ports.
+  return authorities.some((authority) => origin === `http://${authority}`);
 }
 
 export async function startServer() {
@@ -134,6 +160,8 @@ export async function startServer() {
   const terminals = new WeakMap<object, TerminalSession>();
   const pendingTerminalMessages = new WeakMap<object, Array<string | BufferSource>>();
   const browserStreams = new WeakMap<object, BrowserStreamHandle>();
+  const closedSockets = new WeakSet<object>();
+  const activeTerminals = new Set<TerminalSession>();
 
   type WSData =
     | { kind: "terminal"; paneId: string; cwd: string }
@@ -169,8 +197,8 @@ export async function startServer() {
 
       if (url.pathname === "/api/terminal/spawn") {
         const paneId = url.searchParams.get("paneId");
-        if (!paneId) {
-          return new Response("paneId is required", { status: 400, headers: CORS_HEADERS });
+        if (!paneId || paneId.length > 256) {
+          return new Response("invalid paneId", { status: 400, headers: CORS_HEADERS });
         }
         const cwd = url.searchParams.get("cwd") || paths.root;
         const upgraded = srv.upgrade(request, { data: { kind: "terminal", paneId, cwd } });
@@ -181,8 +209,8 @@ export async function startServer() {
       if (url.pathname === "/api/browser/stream") {
         const workspaceId = url.searchParams.get("workspaceId");
         const paneId = url.searchParams.get("paneId");
-        if (!workspaceId || !paneId) {
-          return new Response("workspaceId and paneId are required", { status: 400, headers: CORS_HEADERS });
+        if (!workspaceId || !paneId || workspaceId.length > 256 || paneId.length > 256) {
+          return new Response("invalid workspaceId or paneId", { status: 400, headers: CORS_HEADERS });
         }
         const upgraded = srv.upgrade(request, { data: { kind: "browser", workspaceId, paneId } });
         if (upgraded) return undefined as unknown as Response;
@@ -205,7 +233,14 @@ export async function startServer() {
         const cwd = ws.data.cwd || paths.root;
         try {
           const session = await spawnTerminalSession(ws, ws.data.paneId, cwd);
+          if (closedSockets.has(ws as unknown as object)) {
+            session.closed = true;
+            session.proc.kill("SIGTERM");
+            session.proc.terminal?.close();
+            return;
+          }
           terminals.set(ws as unknown as object, session);
+          activeTerminals.add(session);
           const pendingMessages = pendingTerminalMessages.get(ws as unknown as object) ?? [];
           pendingTerminalMessages.delete(ws as unknown as object);
           for (const pendingMessage of pendingMessages) handleTerminalMessage(session, pendingMessage);
@@ -216,6 +251,13 @@ export async function startServer() {
         }
       },
       async message(ws, message) {
+        if (closedSockets.has(ws as unknown as object)) return;
+        const bytes = typeof message === "string" ? Buffer.byteLength(message) : bufferSourceToBytes(message).byteLength;
+        const limit = ws.data.kind === "browser" ? MAX_BROWSER_MESSAGE_BYTES : MAX_TERMINAL_MESSAGE_BYTES;
+        if (bytes > limit) {
+          ws.close(1009, "message too large");
+          return;
+        }
         if (ws.data.kind === "browser") {
           await handleBrowserMessage(ws, message);
           return;
@@ -223,6 +265,11 @@ export async function startServer() {
         const session = terminals.get(ws as unknown as object);
         if (!session) {
           const pendingMessages = pendingTerminalMessages.get(ws as unknown as object) ?? [];
+          if (pendingMessages.length >= MAX_PENDING_TERMINAL_MESSAGES) {
+            ws.close(1009, "too many pending messages");
+            pendingTerminalMessages.delete(ws as unknown as object);
+            return;
+          }
           pendingMessages.push(message);
           pendingTerminalMessages.set(ws as unknown as object, pendingMessages);
           return;
@@ -230,6 +277,8 @@ export async function startServer() {
         handleTerminalMessage(session, message);
       },
       close(ws) {
+        closedSockets.add(ws as unknown as object);
+        pendingTerminalMessages.delete(ws as unknown as object);
         const browserStream = browserStreams.get(ws as unknown as object);
         if (browserStream) {
           browserStream.close();
@@ -242,7 +291,7 @@ export async function startServer() {
         session.proc.kill("SIGTERM");
         session.proc.terminal?.close();
         terminals.delete(ws as unknown as object);
-        pendingTerminalMessages.delete(ws as unknown as object);
+        activeTerminals.delete(session);
       },
     },
   });
@@ -254,6 +303,12 @@ export async function startServer() {
     if (shuttingDown) return;
     shuttingDown = true;
     await logLine(paths.serviceLogFile, `[${new Date().toISOString()}] shutdown ${signal}`);
+    for (const session of activeTerminals) {
+      session.closed = true;
+      session.proc.kill("SIGTERM");
+      session.proc.terminal?.close();
+    }
+    activeTerminals.clear();
     await browserFrames.close();
     server.stop(true);
     process.exit(0);
@@ -277,17 +332,20 @@ export async function startServer() {
       const session = await store.getBrowserSession(workspaceId, paneId);
       const stream = await browserFrames.stream(session, {
         send: (message) => {
-          ws.send(JSON.stringify(message));
+          if (!closedSockets.has(ws as unknown as object)) ws.send(JSON.stringify(message));
         },
         onNavigation: async (url) => {
           const result = await store.navigateBrowserPane({ workspaceId, paneId, url });
           return result.browser;
         },
       });
-      browserStreams.set(ws as unknown as object, stream);
+      if (closedSockets.has(ws as unknown as object)) stream.close();
+      else browserStreams.set(ws as unknown as object, stream);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      ws.send(JSON.stringify({ type: "error", message }));
+      if (!closedSockets.has(ws as unknown as object)) {
+        ws.send(JSON.stringify({ type: "error", message: "browser stream unavailable" }));
+      }
+      void logLine(paths.serviceLogFile, `browser stream: ${errorMessage(error).replace(/[\r\n]/g, " ").slice(0, 1000)}`);
     }
   }
 
@@ -319,7 +377,7 @@ export async function startServer() {
           replace: true,
         });
       } catch (error) {
-        ws.send(JSON.stringify({ type: "error", message: errorMessage(error) }));
+        reportBrowserFailure(ws, "navigation", error);
       }
       return;
     }
@@ -329,14 +387,31 @@ export async function startServer() {
         await browserFrames.interact(session, command);
         return;
       } catch (error) {
-        ws.send(JSON.stringify({ type: "error", message: errorMessage(error) }));
+        reportBrowserFailure(ws, "interaction", error);
+        return;
       }
     }
-    try {
-      ws.send(JSON.stringify(await browserFrames.stateFor(await store.getBrowserSession(ws.data.workspaceId, ws.data.paneId))));
-    } catch (error) {
-      ws.send(JSON.stringify({ type: "error", message: errorMessage(error) }));
+    ws.send(JSON.stringify({ type: "error", message: "unsupported browser command" }));
+  }
+
+  function reportBrowserFailure(ws: ServerWebSocketLike, activity: "navigation" | "interaction", error: unknown): void {
+    // Errors from workspace storage, Chromium and the OS may contain absolute
+    // paths, process details, or privileged command output. Keep those in logs.
+    const message = activity === "interaction" && error instanceof Error &&
+      error.message === "file chooser rejected invalid paths or oversized files"
+      ? "file chooser rejected invalid paths or oversized files"
+      : `browser ${activity} failed`;
+    if (!closedSockets.has(ws as unknown as object)) {
+      try {
+        ws.send(JSON.stringify({ type: "error", message }));
+      } catch {
+        // The client may have disconnected while the browser command ran.
+      }
     }
+    void logLine(
+      paths.serviceLogFile,
+      `[${new Date().toISOString()}] browser ${activity}: ${errorMessage(error).replace(/[\r\n]/g, " ").slice(0, 1000)}`,
+    ).catch(() => undefined);
   }
 
   async function spawnTerminalSession(ws: ServerWebSocketLike, paneId: string, cwd: string): Promise<TerminalSession> {
@@ -424,51 +499,60 @@ export async function startServer() {
   }
 }
 
-function isBrowserInteractionMessage(command: Record<string, unknown>): command is BrowserInteractionMessage {
+export function isBrowserInteractionMessage(command: Record<string, unknown>): command is BrowserInteractionMessage {
+  const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value);
+  const shortText = (value: unknown) => typeof value === "string" && value.length <= 65_536;
   if (command.type === "viewport") {
-    return typeof command.width === "number" && typeof command.height === "number";
+    return finite(command.width) && finite(command.height) &&
+      (command.width as number) > 0 && (command.height as number) > 0 &&
+      (command.deviceScaleFactor === undefined ||
+        (finite(command.deviceScaleFactor) && (command.deviceScaleFactor as number) > 0));
   }
   if (command.type === "mouse") {
     return (
       (command.event === "move" || command.event === "down" || command.event === "up" || command.event === "dblclick") &&
-      typeof command.x === "number" &&
-      typeof command.y === "number"
+      finite(command.x) &&
+      finite(command.y)
     );
   }
-  if (command.type === "reload") return command.url === undefined || typeof command.url === "string";
+  if (command.type === "reload") return command.url === undefined || shortText(command.url);
   if (command.type === "click") {
-    return typeof command.x === "number" && typeof command.y === "number";
+    return finite(command.x) && finite(command.y);
   }
   if (command.type === "wheel") {
     return (
-      typeof command.x === "number" &&
-      typeof command.y === "number" &&
-      typeof command.deltaX === "number" &&
-      typeof command.deltaY === "number"
+      finite(command.x) &&
+      finite(command.y) &&
+      finite(command.deltaX) &&
+      finite(command.deltaY)
     );
   }
   if (command.type === "key") {
-    return (command.event === "down" || command.event === "up") && typeof command.key === "string";
+    return (command.event === "down" || command.event === "up") &&
+      typeof command.key === "string" && command.key.length <= 128;
   }
-  if (command.type === "text") return typeof command.text === "string";
-  if (command.type === "paste") return typeof command.text === "string";
-  if (command.type === "type") return typeof command.text === "string";
+  if (command.type === "text") return shortText(command.text);
+  if (command.type === "paste") return shortText(command.text);
+  if (command.type === "type") return shortText(command.text);
   if (command.type === "dialogResponse") {
     return typeof command.accept === "boolean" &&
-      (command.promptText === undefined || typeof command.promptText === "string");
+      (command.promptText === undefined || shortText(command.promptText));
   }
   if (command.type === "chooseFiles") {
     const paths = command.paths;
     const files = command.files;
     return (paths === undefined || (Array.isArray(paths) && paths.length <= 20 &&
-      paths.every((path: unknown) => typeof path === "string"))) &&
+      paths.every((path: unknown) => typeof path === "string" && path.length <= 4096))) &&
       (files === undefined || (Array.isArray(files) && files.length <= 20 &&
+        files.reduce((total: number, file: unknown) => total +
+          (file && typeof file === "object" && typeof (file as Record<string, unknown>).data === "string"
+            ? ((file as { data: string }).data.length) : 0), 0) <= 12_000_000 &&
         files.every((file: unknown) => {
           if (!file || typeof file !== "object") return false;
           const candidate = file as Record<string, unknown>;
-          return typeof candidate.name === "string" &&
-            typeof candidate.mimeType === "string" &&
-            typeof candidate.data === "string";
+          return typeof candidate.name === "string" && candidate.name.length <= 255 &&
+            typeof candidate.mimeType === "string" && candidate.mimeType.length <= 255 &&
+            typeof candidate.data === "string" && candidate.data.length <= 8_000_000;
         })));
   }
   return false;
@@ -492,13 +576,13 @@ function handleTerminalMessage(
   }
   if (!parsed || typeof parsed !== "object") return;
   const command = parsed as Record<string, unknown>;
-  if (command.type === "input" && typeof command.data === "string") {
+  if (command.type === "input" && typeof command.data === "string" && command.data.length <= 65_536) {
     session.proc.terminal?.write(command.data);
   }
   if (
     command.type === "resize" &&
-    typeof command.cols === "number" &&
-    typeof command.rows === "number"
+    typeof command.cols === "number" && Number.isFinite(command.cols) && command.cols >= 1 && command.cols <= 1000 &&
+    typeof command.rows === "number" && Number.isFinite(command.rows) && command.rows >= 1 && command.rows <= 1000
   ) {
     session.proc.terminal?.resize(Math.max(1, Math.floor(command.cols)), Math.max(1, Math.floor(command.rows)));
   }

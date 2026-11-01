@@ -85,7 +85,7 @@ test(
           title: "Browser",
           canGoBack: false,
           canGoForward: false,
-          profilePath: join(tempRoot, "blank-profile"),
+          profilePath: join(tempRoot, "profiles", "workspace-test", "blank-profile"),
         },
         {
           send: (message) => {
@@ -157,6 +157,130 @@ test(
   20_000,
 );
 
+
+test(
+  "disconnected browser streams release orphan Chromium contexts",
+  async () => {
+    tempRoot = await mkdtemp(join(tmpdir(), "canvas-browser-idle-"));
+    const service = new BrowserFrameService(join(tempRoot, "profiles"), () => undefined, 50);
+    const session = browserSession("<title>Idle cleanup</title>");
+    try {
+      const handle = await service.stream(session, { send: () => undefined });
+      const internals = service as unknown as { liveBrowsers: Map<string, unknown> };
+      expect(internals.liveBrowsers.size).toBe(1);
+      handle.close();
+      await waitFor(() => internals.liveBrowsers.size === 0, "idle Chromium cleanup");
+    } finally {
+      await service.close();
+    }
+  },
+  20_000,
+);
+
+test(
+  "failed browser stream initialization detaches its subscriber and releases resources",
+  async () => {
+    // The cleanup contract is tested with a controlled failure, rather than
+    // launching Chromium against a malformed URL (which can hang its driver).
+    tempRoot = await mkdtemp(join(tmpdir(), "canvas-browser-failed-"));
+    const service = new BrowserFrameService(join(tempRoot, "profiles"), () => undefined, 10);
+    const session = browserSession("<title>Stream failure</title>");
+    let closed = false;
+    const live = {
+      session,
+      subscribers: new Map<number, unknown>(),
+      persistSubscriberId: null as number | null,
+      pendingDialog: null,
+      pendingFileChooser: null,
+      idleTimer: null as ReturnType<typeof setTimeout> | null,
+      context: { close: async () => { closed = true; } },
+    };
+    const internals = service as unknown as {
+      liveBrowsers: Map<string, Promise<unknown>>;
+      startScreencast: (live: unknown) => Promise<void>;
+    };
+    internals.liveBrowsers.set(session.profilePath, Promise.resolve(live));
+    internals.startScreencast = async () => { throw new Error("fixture screencast failure"); };
+    try {
+      await expect(service.stream(session, { send: () => undefined }))
+        .rejects.toThrow("fixture screencast failure");
+      expect(live.subscribers.size).toBe(0);
+      await waitFor(() => closed && internals.liveBrowsers.size === 0, "failed stream cleanup");
+    } finally {
+      await service.close();
+    }
+  },
+  10_000,
+);
+
+test(
+  "browser file chooser rejects malformed bytes and accepts valid host uploads",
+  async () => {
+    tempRoot = await mkdtemp(join(tmpdir(), "canvas-browser-upload-"));
+    const service = new BrowserFrameService(join(tempRoot, "profiles"), () => undefined);
+    const session = browserSession(
+      "<title>upload</title><input id='upload' type='file' style='position:absolute;left:20px;top:20px;width:200px;height:40px' onchange='document.title=this.files[0]?.name ?? \"missing\"'>",
+    );
+    const messages: Array<{ type: string; title?: string }> = [];
+    try {
+      const handle = await service.stream(session, { send: (message) => { messages.push(message); } });
+      try {
+        await service.interact(session, { type: "viewport", width: 500, height: 320 });
+        await service.interact(session, { type: "mouse", event: "down", x: 60, y: 40, button: "left" });
+        await service.interact(session, { type: "mouse", event: "up", x: 60, y: 40, button: "left" });
+        await waitFor(() => messages.some((message) => message.type === "fileChooser"), "file picker event");
+        await expect(service.interact(session, {
+          type: "chooseFiles",
+          files: [{ name: "bad.txt", mimeType: "text/plain", data: "%%%%" }],
+        })).rejects.toThrow("file chooser rejected");
+        await service.interact(session, {
+          type: "chooseFiles",
+          files: [{ name: "fixture.txt", mimeType: "text/plain", data: Buffer.from("hello").toString("base64") }],
+        });
+        await waitFor(() => messages.some((message) => message.type === "state" && message.title === "fixture.txt"), "file chooser upload");
+      } finally {
+        handle.close();
+      }
+    } finally {
+      await service.close();
+    }
+  },
+  20_000,
+);
+
+test("concurrent Chromium profile allocation never exceeds the 24-context ceiling", async () => {
+  tempRoot = await mkdtemp(join(tmpdir(), "canvas-browser-cap-"));
+  const service = new BrowserFrameService(join(tempRoot, "profiles"), () => undefined);
+  const internals = service as unknown as {
+    liveBrowserFor: (session: BrowserSession) => Promise<unknown>;
+    createLiveBrowser: (session: BrowserSession) => Promise<unknown>;
+  };
+  // Avoid starting 50 Chromium instances; simulate slow context creation and
+  // keep each profile subscribed so it is not eligible for idle eviction.
+  internals.createLiveBrowser = async () => {
+    await Bun.sleep(5);
+    return {
+      subscribers: new Map([[1, true]]),
+      idleTimer: null,
+      context: { close: async () => undefined },
+    };
+  };
+  try {
+    const requests = Array.from({ length: 50 }, (_, index) => ({
+      ...browserSession("<title>Capacity</title>"),
+      profilePath: join(tempRoot, "profiles", String(index)),
+    }));
+    const results = await Promise.allSettled(requests.map((session) => internals.liveBrowserFor(session)));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(24);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(26);
+    for (const result of results) {
+      if (result.status === "rejected") expect(String(result.reason)).toContain("too many active Chromium profiles");
+    }
+  } finally {
+    await service.close();
+  }
+}, 10_000);
+
 function browserSession(html: string): BrowserSession {
   return {
     workspaceId: "workspace:test",
@@ -165,7 +289,7 @@ function browserSession(html: string): BrowserSession {
     title: "Browser",
     canGoBack: false,
     canGoForward: false,
-    profilePath: join(tempRoot, "profile"),
+    profilePath: join(tempRoot, "profiles", "workspace-test", "profile"),
   };
 }
 

@@ -138,7 +138,7 @@ export const api = {
 export function lookupHandler(path: string): Handler | null {
   let cur: unknown = api;
   for (const part of path.split(".")) {
-    if (!part || cur === null || typeof cur !== "object") return null;
+    if (!part || cur === null || typeof cur !== "object" || !Object.hasOwn(cur, part)) return null;
     cur = (cur as Record<string, unknown>)[part];
   }
   return typeof cur === "function" ? (cur as Handler) : null;
