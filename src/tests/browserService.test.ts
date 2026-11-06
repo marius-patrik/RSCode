@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type BrowserFrameMessage, BrowserFrameService, type BrowserStateMessage } from "@/server/browserService";
+import { type BrowserFrameMessage, BrowserFrameService, type BrowserStateMessage, retryChromiumNativeCrash } from "@/server/browserService";
 import type { BrowserSession } from "@/shared/schema";
 
 let tempRoot = "";
@@ -157,6 +157,100 @@ test(
   20_000,
 );
 
+test("native Chromium SIGSEGV during launch retries once after profile cleanup", async () => {
+  let launches = 0;
+  let cleanups = 0;
+  const value = await retryChromiumNativeCrash(
+    async () => {
+      launches++;
+      if (launches === 1) throw new Error("persistentContext: browser closed [pid][err] Received signal 11 SI_KERNEL");
+      return "recovered";
+    },
+    async () => { cleanups++; },
+  );
+  expect(value).toBe("recovered");
+  expect(launches).toBe(2);
+  expect(cleanups).toBe(1);
+});
+
+test("Chromium recovery never retries non-crash failures or an endlessly crashing process", async () => {
+  let launches = 0;
+  let cleanups = 0;
+  await expect(retryChromiumNativeCrash(async () => {
+    launches++;
+    throw new Error("Profile is in use by another Chromium process");
+  }, async () => { cleanups++; })).rejects.toThrow("Profile is in use");
+  expect(launches).toBe(1);
+  expect(cleanups).toBe(0);
+
+  launches = 0;
+  await expect(retryChromiumNativeCrash(async () => {
+    launches++;
+    throw new Error("persistentContext: Received signal 11 SIGSEGV");
+  }, async () => { cleanups++; })).rejects.toThrow("Received signal 11");
+  expect(launches).toBe(2);
+  expect(cleanups).toBe(1);
+});
+
+test("concurrent screencast subscribers await exactly one CDP startup", async () => {
+  const service = new BrowserFrameService(join(tmpdir(), "unused-screencast-test"), () => undefined);
+  let releaseEnable!: () => void;
+  const enable = new Promise<void>((resolve) => { releaseEnable = resolve; });
+  const calls: string[] = [];
+  const subscriptions: string[] = [];
+  const live = {
+    screencastStarted: false,
+    screencastStarting: null as Promise<void> | null,
+    cdp: {
+      send: async (name: string) => {
+        calls.push(name);
+        if (name === "Page.enable") await enable;
+      },
+      on: (name: string) => { subscriptions.push(name); },
+      off: (name: string) => { subscriptions.push(`off:${name}`); },
+    },
+  };
+  const internal = service as unknown as { startScreencast: (live: unknown) => Promise<void> };
+  const first = internal.startScreencast(live);
+  const second = internal.startScreencast(live);
+  expect(calls).toEqual(["Page.enable"]);
+  expect(live.screencastStarted).toBe(false);
+  releaseEnable();
+  await Promise.all([first, second]);
+  expect(calls).toEqual(["Page.enable", "Page.startScreencast"]);
+  expect(subscriptions).toEqual(["Page.screencastFrame"]);
+  expect(live.screencastStarted).toBe(true);
+  expect(live.screencastStarting).toBeNull();
+  await service.close();
+});
+
+test("failed CDP start resets the shared promise and permits exactly one retry", async () => {
+  const service = new BrowserFrameService(join(tmpdir(), "unused-screencast-test"), () => undefined);
+  let attempts = 0;
+  let listeners = 0;
+  const live = {
+    screencastStarted: false,
+    screencastStarting: null as Promise<void> | null,
+    cdp: {
+      send: async (name: string) => {
+        if (name === "Page.startScreencast" && ++attempts === 1) throw new Error("CDP startup failed");
+      },
+      on: () => { listeners++; },
+      off: () => { listeners--; },
+    },
+  };
+  const internal = service as unknown as { startScreencast: (live: unknown) => Promise<void> };
+  await expect(internal.startScreencast(live)).rejects.toThrow("CDP startup failed");
+  expect(live.screencastStarting).toBeNull();
+  expect(live.screencastStarted).toBe(false);
+  expect(listeners).toBe(0);
+  await Promise.all([internal.startScreencast(live), internal.startScreencast(live)]);
+  expect(attempts).toBe(2);
+  expect(listeners).toBe(1);
+  expect(live.screencastStarted).toBe(true);
+  await service.close();
+});
+
 function browserSession(html: string): BrowserSession {
   return {
     workspaceId: "workspace:test",
@@ -184,31 +278,34 @@ test(
     tempRoot = await mkdtemp(join(tmpdir(), "canvas-browser-"));
     const service = new BrowserFrameService(join(tempRoot, "profiles"), () => undefined);
     const session = browserSession(
-      "<title>Dialog fixture</title><script>setTimeout(() => { document.title = confirm('Proceed?') ? 'confirmed' : 'cancelled'; }, 1200);</script>",
+      '<title>Dialog fixture</title><button style="position:absolute;left:20px;top:20px;width:120px;height:32px" onclick="document.title = confirm(\'Proceed?\') ? \'confirmed\' : \'cancelled\'">Ask</button>',
     );
     const messages: Array<{ type: string; message?: string }> = [];
     try {
-      console.error("DIALOG_TIMER_TRACE before stream");
       const handle = await service.stream(session, { send: (message) => { messages.push(message); } });
-      console.error("DIALOG_TIMER_TRACE stream ready");
       try {
-        console.error("DIALOG_TIMER_TRACE waiting for dialog");
-        await waitFor(() => messages.some((message) => message.type === "dialog"), "browser confirmation dialog");
-        console.error("DIALOG_TIMER_TRACE dialog received");
-        expect(messages.some((message) => message.message === "Proceed?")).toBe(true);
-        await service.interact(session, { type: "dialogResponse", accept: true });
-        console.error("DIALOG_TIMER_TRACE accepted");
-        const state = await service.stateFor(session);
-        console.error("DIALOG_TIMER_TRACE state read");
-        expect(state.title).toBe("confirmed");
+        // A timer firing during the initial screencast/page setup can block
+        // launch itself and deadlock this test before its dialog subscriber is ready.
+        // Initiate the dialog only after the subscriber has been established.
+        await service.interact(session, { type: "mouse", event: "down", x: 40, y: 36, button: "left" });
+        const clicked = service.interact(session, { type: "mouse", event: "up", x: 40, y: 36, button: "left" });
+        try {
+          await waitFor(() => messages.some((message) => message.type === "dialog"), "browser confirmation dialog");
+          expect(messages.some((message) => message.message === "Proceed?")).toBe(true);
+          await service.interact(session, { type: "dialogResponse", accept: true });
+          await clicked;
+          const state = await service.stateFor(session);
+          expect(state.title).toBe("confirmed");
+        } finally {
+          // Ensure a pending dialog never survives into browser process disposal.
+          await service.interact(session, { type: "dialogResponse", accept: false }).catch(() => undefined);
+          await clicked.catch(() => undefined);
+        }
       } finally {
-        console.error("DIALOG_TIMER_TRACE handle closing");
         handle.close();
       }
     } finally {
-      console.error("DIALOG_TIMER_TRACE service closing");
       await service.close();
-      console.error("DIALOG_TIMER_TRACE service closed");
     }
   },
   20_000,

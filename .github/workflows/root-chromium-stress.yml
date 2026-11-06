@@ -1,0 +1,40 @@
+# Real-browser stress on the root Chromium launch/stream lifecycle.
+# Test-only, PR-only, no publisher/deployer and no write permissions.
+name: Root Chromium reliability stress
+on:
+  pull_request:
+    paths:
+      - "src/server/browserService.ts"
+      - "src/tests/browserService.test.ts"
+      - ".github/workflows/root-chromium-stress.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-stress:
+    name: Chromium stress replica ${{ matrix.replica }}
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun install --frozen-lockfile
+      - name: Exercise Chromium process launch, frame streaming, resize, navigation and cleanup repeatedly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for iteration in $(seq 1 10); do
+            echo "::group::Chromium stress iteration ${iteration} / 10"
+            bun test src/tests/browserService.test.ts
+            echo "::endgroup::"
+          done

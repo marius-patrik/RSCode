@@ -114,6 +114,7 @@ type LiveBrowser = {
   loading: boolean;
   viewport: BrowserViewport;
   screencastStarted: boolean;
+  screencastStarting: Promise<void> | null;
   lastFrame: BrowserFrameMessage | null;
   subscribers: Map<number, BrowserStreamSubscriber>;
   persistSubscriberId: number | null;
@@ -146,17 +147,7 @@ export class BrowserFrameService {
     live.subscribers.set(subscriberId, subscriber);
     if (subscriber.onNavigation && live.persistSubscriberId === null) live.persistSubscriberId = subscriberId;
 
-    await this.startScreencast(live);
-    await this.ensurePageUrl(live, session.url);
-    // about:blank does not always repaint after screencast activation.
-    // Make an explicit initial capture so a new pane never waits forever for CDP frames.
-    if (!live.lastFrame || live.lastFrame.url !== browserStoredUrl(live.page.url())) {
-      await this.captureInitialFrame(live);
-    }
-    await this.sendToSubscriber(subscriber, await this.stateForLive(live));
-    if (live.lastFrame) await this.sendToSubscriber(subscriber, live.lastFrame);
-
-    return {
+    const handle: BrowserStreamHandle = {
       close: () => {
         live.subscribers.delete(subscriberId);
         if (live.subscribers.size === 0) {
@@ -177,6 +168,19 @@ export class BrowserFrameService {
         }
       },
     };
+    try {
+      await this.startScreencast(live);
+      await this.ensurePageUrl(live, session.url);
+      if (!live.lastFrame || live.lastFrame.url !== browserStoredUrl(live.page.url())) {
+        await this.captureInitialFrame(live);
+      }
+      await this.sendToSubscriber(subscriber, await this.stateForLive(live));
+      if (live.lastFrame) await this.sendToSubscriber(subscriber, live.lastFrame);
+      return handle;
+    } catch (error) {
+      handle.close();
+      throw error;
+    }
   }
 
   async frameFor(session: BrowserSession): Promise<BrowserFrameMessage> {
@@ -333,21 +337,23 @@ export class BrowserFrameService {
     const userDataDir = join(session.profilePath, "chromium");
     await mkdir(userDataDir, { recursive: true });
     await clearChromiumSingletonFiles(userDataDir);
-    const context = await chromium.launchPersistentContext(userDataDir, {
-      executablePath,
-      headless: true,
-      viewport: { width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height },
-      deviceScaleFactor: DEFAULT_VIEWPORT.deviceScaleFactor,
-      ignoreHTTPSErrors: true,
-      acceptDownloads: true,
-      args: [
-        "--disable-background-networking",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--no-default-browser-check",
-        "--no-first-run",
-      ],
-    });
+    const launch = () =>
+      chromium.launchPersistentContext(userDataDir, {
+        executablePath,
+        headless: true,
+        viewport: { width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height },
+        deviceScaleFactor: DEFAULT_VIEWPORT.deviceScaleFactor,
+        ignoreHTTPSErrors: true,
+        acceptDownloads: true,
+        args: [
+          "--disable-background-networking",
+          "--disable-gpu",
+          "--disable-dev-shm-usage",
+          "--no-default-browser-check",
+          "--no-first-run",
+        ],
+      });
+    const context = await retryChromiumNativeCrash(launch, () => clearChromiumSingletonFiles(userDataDir));
     const page = context.pages()[0] ?? (await context.newPage());
     await page.setViewportSize({ width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height });
     // A newly created about:blank tab may not have a painted compositor surface.
@@ -368,6 +374,7 @@ export class BrowserFrameService {
       loading: false,
       viewport: DEFAULT_VIEWPORT,
       screencastStarted: false,
+      screencastStarting: null,
       lastFrame: null,
       subscribers: new Map(),
       persistSubscriberId: null,
@@ -435,12 +442,31 @@ export class BrowserFrameService {
 
   private async startScreencast(live: LiveBrowser): Promise<void> {
     if (live.screencastStarted) return;
-    live.screencastStarted = true;
-    await live.cdp.send("Page.enable");
-    live.cdp.on("Page.screencastFrame", (event) => {
-      void this.handleScreencastFrame(live, event as ScreencastEvent);
-    });
-    await live.cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+    if (live.screencastStarting) return live.screencastStarting;
+    // All subscribers must await the *same* CDP initialization, not a boolean
+    // set before Page.enable or Page.startScreencast has acknowledged.
+    const start = (async () => {
+      const onFrame = (event: unknown) => {
+        void this.handleScreencastFrame(live, event as ScreencastEvent)
+          .catch((error) => this.log(`screencast frame processing failed: ${errorMessage(error)}`));
+      };
+      try {
+        await live.cdp.send("Page.enable");
+        live.cdp.on("Page.screencastFrame", onFrame);
+        await live.cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+        live.screencastStarted = true;
+      } catch (error) {
+        live.cdp.off("Page.screencastFrame", onFrame);
+        live.screencastStarted = false;
+        throw error;
+      }
+    })();
+    live.screencastStarting = start;
+    try {
+      await start;
+    } finally {
+      if (live.screencastStarting === start) live.screencastStarting = null;
+    }
   }
 
   private async captureInitialFrame(live: LiveBrowser): Promise<void> {
@@ -806,6 +832,26 @@ function clamp(value: number, min: number, max: number): number {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * A native Chromium SIGSEGV can terminate its process before CDP initialization.
+ * Retry at most once, only for an observed native crash, after clearing the
+ * exited process's stale singleton locks. Do not retry authorization, profile
+ * contention or other launch failures; a repeat crash remains a hard failure.
+ */
+export async function retryChromiumNativeCrash<T>(
+  launch: () => Promise<T>,
+  prepareRetry: () => Promise<void>,
+): Promise<T> {
+  try {
+    return await launch();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Received signal 11\b|SIGSEGV\b/i.test(message)) throw error;
+    await prepareRetry();
+    return launch();
+  }
 }
 
 async function clearChromiumSingletonFiles(profilePath: string): Promise<void> {
