@@ -1,0 +1,298 @@
+.workbench-shell {
+  --root-resizer-size: 4px;
+  grid-template-rows: 36px minmax(0, 1fr) var(--root-resizer-size) var(--panel-size) 24px;
+}
+
+.workbench-shell.panel-collapsed {
+  grid-template-rows: 36px minmax(0, 1fr) 0 0 24px;
+}
+
+.workbench-center {
+  grid-template-columns: 42px var(--primary-size) var(--root-resizer-size) minmax(0, 1fr) var(
+      --root-resizer-size
+    ) var(--secondary-size);
+}
+
+.primary-collapsed .workbench-center {
+  grid-template-columns: 42px 0 0 minmax(0, 1fr) var(--root-resizer-size) var(--secondary-size);
+}
+
+.secondary-collapsed .workbench-center {
+  grid-template-columns: 42px var(--primary-size) var(--root-resizer-size) minmax(0, 1fr) 0 0;
+}
+
+.primary-collapsed.secondary-collapsed .workbench-center {
+  grid-template-columns: 42px 0 0 minmax(0, 1fr) 0 0;
+}
+
+.root-primary,
+.root-secondary,
+.root-panel {
+  border: 0;
+}
+
+.root-resizer {
+  position: relative;
+  z-index: 50;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+  touch-action: none;
+  background: transparent;
+}
+
+.root-resizer::after {
+  content: "";
+  position: absolute;
+  background: var(--toolbar-border);
+  transition: background-color 90ms ease;
+}
+
+.root-resizer-column {
+  cursor: col-resize;
+}
+
+.root-resizer-column::after {
+  inset: 0 1px;
+}
+
+.root-resizer-row {
+  cursor: row-resize;
+}
+
+.root-resizer-row::after {
+  inset: 1px 0;
+}
+
+.root-resizer:hover::after,
+.root-resizer:focus-visible::after,
+.root-resizing .root-resizer::after {
+  background: var(--accent);
+}
+
+.primary-collapsed .root-resizer-primary,
+.secondary-collapsed .root-resizer-secondary,
+.panel-collapsed .root-resizer-panel {
+  display: none;
+}
+
+.workbench-shell.root-resizing,
+.workbench-shell.root-resizing * {
+  user-select: none !important;
+}
+
+.workbench-shell.root-resizing iframe {
+  pointer-events: none !important;
+}
+
+.workbench-shell.root-resizing-column,
+.workbench-shell.root-resizing-column * {
+  cursor: col-resize !important;
+}
+
+.workbench-shell.root-resizing-row,
+.workbench-shell.root-resizing-row * {
+  cursor: row-resize !important;
+}
+
+.workspace-github-auth {
+  display: grid;
+  gap: 7px;
+}
+
+.workspace-github-auth-button {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.workspace-github-auth-button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.workspace-github-auth-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.workspace-github-auth .workspace-help {
+  margin: 0;
+  max-width: 560px;
+  line-height: 1.45;
+}
+
+.workspace-auth-status {
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.workspace-auth-status.status-success {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--toolbar-border));
+  color: var(--text);
+}
+
+.workspace-auth-status.status-error,
+.workspace-auth-status.status-denied,
+.workspace-auth-status.status-expired {
+  color: var(--text);
+}
+
+.empty-workbench,
+.empty-workbench-card,
+.empty-workbench-card button {
+  pointer-events: auto;
+}
+
+.workbench-tab-dragging .empty-workbench,
+.workbench-tab-dragging .empty-workbench * {
+  pointer-events: none !important;
+}
+
+.workbench-surface .dv-watermark-container,
+.workbench-surface .dv-watermark {
+  pointer-events: none;
+}
+
+.workbench-dockview-host {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.factory-activity-rail {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 9px 3px;
+  gap: 6px;
+  border-right: 1px solid var(--toolbar-border);
+  background: var(--toolbar);
+}
+.factory-activity-rail button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.factory-activity-rail button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.factory-activity-rail button.active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--text);
+}
+.factory-activity-rail button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+
+/* The shell owns six columns. Every region has a stable grid slot even when hidden. */
+.workbench-center {
+  grid-template-rows: minmax(0, 1fr);
+  isolation: isolate;
+}
+.factory-activity-rail {
+  grid-column: 1;
+  grid-row: 1;
+  z-index: 2;
+}
+.root-primary {
+  grid-column: 2;
+  grid-row: 1;
+}
+.root-resizer-primary {
+  grid-column: 3;
+  grid-row: 1;
+}
+.root-main {
+  grid-column: 4;
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.root-resizer-secondary {
+  grid-column: 5;
+  grid-row: 1;
+}
+.root-secondary {
+  grid-column: 6;
+  grid-row: 1;
+}
+.root-resizer {
+  z-index: 1;
+}
+.primary-collapsed .root-main,
+.secondary-collapsed .root-main {
+  visibility: visible;
+  pointer-events: auto;
+}
+.workbench-surface-main {
+  min-width: 0;
+  min-height: 0;
+}
+:root {
+  --layer-surface: 0;
+  --layer-resizer: 1;
+  --layer-popover: 100;
+  --layer-modal: 200;
+}
+[data-radix-popper-content-wrapper] {
+  z-index: var(--layer-popover) !important;
+}
+.workspace-dialog-backdrop {
+  z-index: var(--layer-modal);
+}
+.workbench-header {
+  z-index: 3;
+}
+.workbench-statusbar {
+  z-index: 2;
+}
+@media (max-width: 680px) {
+  .workbench-center {
+    grid-template-columns: 42px var(--primary-size) var(--root-resizer-size) minmax(0, 1fr) 0 0;
+  }
+  .workbench-shell.primary-collapsed .workbench-center {
+    grid-template-columns: 42px 0 0 minmax(0, 1fr) 0 0;
+  }
+}
+
+.factory-activity-rail button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

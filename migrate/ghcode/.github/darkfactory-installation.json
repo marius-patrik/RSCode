@@ -1,0 +1,12 @@
+{
+  "managedBy": "DarkFactory",
+  "schema": 2,
+  "slug": "marius-patrik/GHCode",
+  "sourceBranch": "development",
+  "release": {
+    "tag": "v0.292.4",
+    "sha": "9ec623964a4d441097bbc85fe8366a9447b82b93",
+    "digest": "8ada74d8795d1c9c64245d63c879da5c5959620baa0944e25b77f002ed857722"
+  },
+  "fileHashes": {}
+}

@@ -30,7 +30,15 @@ jobs:
       - name: Detect official quality actions
         id: matrix
         run: |
-          "$RUNNER_TEMP/darkfactory/df-linux-x64" ci matrix --repo "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/df-quality.json"
+          # Independent migration source apps are verified only by the read-only
+          # PR-scoped migration-source-verification.yml workflow. Keep all real
+          # root quality checks while excluding nested reference app matrices.
+          "$RUNNER_TEMP/darkfactory/df-linux-x64" ci matrix --repo "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/df-quality-all.json"
+          jq '.matrix |= map(select(
+            (((.id // "") | startswith("node:migrate/")) | not) and
+            (((.cwd // "") | startswith("migrate/")) | not) and
+            (((.setupCwd // "") | startswith("migrate/")) | not)
+          ))' "$RUNNER_TEMP/df-quality-all.json" > "$RUNNER_TEMP/df-quality.json"
           echo "matrix=$(jq -c .matrix "$RUNNER_TEMP/df-quality.json")" >> "$GITHUB_OUTPUT"
           if [ "$(jq ".matrix | length" "$RUNNER_TEMP/df-quality.json")" -gt 0 ]; then echo "has-actions=true" >> "$GITHUB_OUTPUT"; else echo "has-actions=false" >> "$GITHUB_OUTPUT"; fi
   execute-quality:

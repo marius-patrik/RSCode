@@ -1,0 +1,81 @@
+name: Canvas release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canvas-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select unpublished version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(node -p 'JSON.parse(require("fs").readFileSync("package.json","utf8")).version')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git fetch --tags --quiet
+          if git show-ref --tags --verify --quiet "refs/tags/$tag"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: oven-sh/setup-bun@v2
+        if: steps.version.outputs.skip != 'true'
+        with:
+          bun-version: 1.3.11
+      - name: Install frozen dependencies
+        if: steps.version.outputs.skip != 'true'
+        run: bun install --frozen-lockfile
+      - name: Verify release candidate
+        if: steps.version.outputs.skip != 'true'
+        run: bun run verify
+      - name: Package local source and web app
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          dest="out/canvas-v$version"
+          mkdir -p "$dest/dist"
+          cp package.json bun.lock rsbuild.config.ts tsconfig.json biome.json "$dest/"
+          cp -R docs scripts src "$dest/"
+          cp -R dist/web "$dest/dist/"
+          tar -czf "canvas-v$version-source-web.tar.gz" -C out "canvas-v$version"
+          tar -tzf "canvas-v$version-source-web.tar.gz" > out/package-contents.txt
+          if ! grep -q "canvas-v$version/dist/web/index.html" out/package-contents.txt; then
+            echo "::error::Web bundle missing from release"
+            exit 1
+          fi
+      - name: Publish immutable preview
+        if: steps.version.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          gh release create "v$version" "canvas-v$version-source-web.tar.gz" \
+            --target "$GITHUB_SHA" \
+            --title "Canvas v$version — local preview" \
+            --notes-file docs/RELEASE_NOTES.md \
+            --prerelease
+      - name: Preserve visual acceptance evidence
+        if: always() && steps.version.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvas-release-visual-smoke
+          path: dist/visual-smoke/*.png
+          if-no-files-found: ignore

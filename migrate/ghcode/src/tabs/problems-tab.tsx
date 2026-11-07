@@ -1,0 +1,12 @@
+export function ProblemsTab() {
+  return (
+    <div className="generic-tool-tab">
+      <div className="tool-tab-header">
+        <strong>Problems</strong>
+      </div>
+      <div className="tab-empty">
+        <span>No diagnostics.</span>
+      </div>
+    </div>
+  );
+}

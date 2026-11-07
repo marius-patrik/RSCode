@@ -1,0 +1,87 @@
+# Read-only, PR-only four-platform acceptance for the inert RSCode source snapshot.
+# Archives are built/extracted/tested on real OS runners, but never published.
+name: Migrated RSCode native acceptance
+on:
+  pull_request:
+    paths:
+      - "migrate/rscode/**"
+      - ".github/workflows/migration-native-distribution.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-rscode-native-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - name: windows-x64
+            runner: windows-2025
+            platform: win32
+            arch: x64
+          - name: macos-arm64
+            runner: macos-15
+            platform: darwin
+            arch: arm64
+          - name: macos-x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: migrate/rscode
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/migrate/rscode/out/browser-cache
+      RSCODE_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Assert real host OS and architecture
+        shell: bash
+        run: |
+          bun -e 'if (process.platform !== "${{ matrix.platform }}" || process.arch !== "${{ matrix.arch }}") throw new Error("wrong host: " + process.platform + "-" + process.arch)'
+      - run: bun install --frozen-lockfile
+      - name: Provision Chromium in an isolated package-local directory
+        run: bunx playwright install chromium
+      - name: Provision Linux Chromium system dependencies
+        if: matrix.platform == 'linux'
+        run: bunx playwright install-deps chromium
+      - name: Build source frontend and portable payload
+        shell: bash
+        run: |
+          bun run build:web
+          bun scripts/distribution/build.ts
+      - name: Build archive and verify SHA-256 manifest
+        run: python3 scripts/distribution/archive.py
+      - name: Extract outside checkout and test actual installed payload
+        run: python3 scripts/distribution/accept.py
+      - name: Retain manifests, SHA-256 and failure evidence only (no binary publication)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-rscode-native-${{ matrix.name }}
+          path: |
+            migrate/rscode/out/native/*.sha256
+            migrate/rscode/out/native/reports/*.json
+          if-no-files-found: warn
+          retention-days: 14

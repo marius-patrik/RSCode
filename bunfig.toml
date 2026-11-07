@@ -1,0 +1,4 @@
+# Source reconciliation adds inert nested applications under migrate/.
+# Preserve root Bun test discovery without executing their independent suites.
+[test]
+pathIgnorePatterns = ["migrate/**"]

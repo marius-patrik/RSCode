@@ -1,0 +1,1403 @@
+{
+  "schema": "darkfactory-web.phase0.repository-inventory.v1",
+  "snapshotUtc": "2026-11-01T23:43:29.516Z",
+  "authority": "Live GitHub repository API; only public metadata; tag coverage supplemented by Git provenance manifests",
+  "repos": {
+    "marius-patrik/DarkFactory-web": {
+      "branches": [
+        {
+          "name": "agent/rscode-01-runtime-security",
+          "sha": "ff102b484d56773df214ea033a585ec60530bcfc",
+          "protected": false
+        },
+        {
+          "name": "agent/rscode-03-security-acceptance",
+          "sha": "65331558418c108f889910c05e7ed7f746e108e1",
+          "protected": false
+        },
+        {
+          "name": "agent/rscode-05-native-distribution",
+          "sha": "6ed334bcad6e89a1837c299937c4c50207904541",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/branch/agent/ghc-00-baseline",
+          "sha": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/branch/agent/ghc-01-identity-isolation",
+          "sha": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/branch/agent/ghc-02-transactional-v3",
+          "sha": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/branch/development",
+          "sha": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/branch/fix/ghc-09a-safe-branch-cleanup",
+          "sha": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/branch/main",
+          "sha": "534e2203425d91783111e5d02d5ec92649fec594",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-3",
+          "sha": "e45e9dd9c1729e376a453834c46ff784f6eaed3e",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-5",
+          "sha": "9253f60f0721ae48365238dc408c268aceac3f32",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-7",
+          "sha": "86493007d94e8ad1e54da5f963afe15f51cfe215",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-9",
+          "sha": "7be2aaa81e91bac854713e547038519c784a6e24",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-11",
+          "sha": "67b63b4883e2543dba7dbed884f6698273fea538",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-13",
+          "sha": "e3974895863ff08102d31114fc3b87fa2f409a7a",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-15",
+          "sha": "22336690c4422b02cef56c07a81be8f600f4c0db",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-16",
+          "sha": "109097091073d9d300d348c272d1de61d5e6feb5",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-20",
+          "sha": "48f5cf5e5286300f08651eec0db478179514f884",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-21",
+          "sha": "8b182b9ea04f3c8ed953298566b0afd83cff16b4",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-23",
+          "sha": "10ece37242ef987e3b99ec9d9f9473012237596a",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-29",
+          "sha": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-30",
+          "sha": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-33",
+          "sha": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+          "protected": false
+        },
+        {
+          "name": "archive/ghcode/pr-34",
+          "sha": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+          "protected": false
+        },
+        {
+          "name": "df-main/v0.290.1",
+          "sha": "79217bb6105b3b9717f24be48cade4e709164da1",
+          "protected": false
+        },
+        {
+          "name": "df-main/v0.291.0",
+          "sha": "16800b2e52f422d9743f0ed81053e1a467067ede",
+          "protected": false
+        },
+        {
+          "name": "df-main/v0.291.5",
+          "sha": "cd2a805678e0ed50d57f0e92d73c0c2981277752",
+          "protected": false
+        },
+        {
+          "name": "df-main/v0.291.7",
+          "sha": "90846fede968c5c3f2dc96f18009e22f07044a0a",
+          "protected": false
+        },
+        {
+          "name": "feat/finish-canvas-runtime-20261101",
+          "sha": "0023ccd3f3dc2e511ed6c622738ce3bbba167c8c",
+          "protected": false
+        },
+        {
+          "name": "fix/browser-resize-frame-5",
+          "sha": "571cd874c04ecfa653a17eaf78bff403d8ee6db0",
+          "protected": false
+        },
+        {
+          "name": "integration/ghcode-consolidation",
+          "sha": "53a2e71f1771179139724dadde6f675fea0713b8",
+          "protected": false
+        },
+        {
+          "name": "main",
+          "sha": "39341ce5f8459b834c8e20b5227c25980078a87e",
+          "protected": false
+        },
+        {
+          "name": "pmarius/canvas-v0.1.0-readiness",
+          "sha": "9477fb9d685848524ad243f12aee9f0c7b713415",
+          "protected": false
+        },
+        {
+          "name": "pmarius/fix-canvas-browser-frame-dimensions",
+          "sha": "2818ba90f43e4883484e85ccc09c7b05d18ecbde",
+          "protected": false
+        }
+      ],
+      "prs": [
+        {
+          "number": 28,
+          "title": "RSC-05: Native Bun/Chromium preview distributions and per-OS installation acceptance (#27)",
+          "state": "open",
+          "merged_at": null,
+          "head": "6ed334bcad6e89a1837c299937c4c50207904541",
+          "source_branch": "agent/rscode-05-native-distribution",
+          "base": "main",
+          "draft": true
+        },
+        {
+          "number": 25,
+          "title": "RSC-03: independently accept and correct privileged runtime security",
+          "state": "open",
+          "merged_at": null,
+          "head": "65331558418c108f889910c05e7ed7f746e108e1",
+          "source_branch": "agent/rscode-03-security-acceptance",
+          "base": "main",
+          "draft": true
+        },
+        {
+          "number": 23,
+          "title": "Security: harden privileged local HTTP, WebSocket and Chromium boundaries (RSC-01)",
+          "state": "open",
+          "merged_at": null,
+          "head": "ff102b484d56773df214ea033a585ec60530bcfc",
+          "source_branch": "agent/rscode-01-runtime-security",
+          "base": "main",
+          "draft": true
+        },
+        {
+          "number": 21,
+          "title": "feat(canvas): v0.2.0 local preview — viewport, Git workflows and browser UI",
+          "state": "closed",
+          "merged_at": "2026-11-01T00:48:50Z",
+          "head": "0023ccd3f3dc2e511ed6c622738ce3bbba167c8c",
+          "source_branch": "feat/finish-canvas-runtime-20261101",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 20,
+          "title": "feat(canvas): harden local app, audit UX and prepare v0.1.0 preview release",
+          "state": "closed",
+          "merged_at": "2026-10-30T22:26:38Z",
+          "head": "9477fb9d685848524ad243f12aee9f0c7b713415",
+          "source_branch": "pmarius/canvas-v0.1.0-readiness",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 17,
+          "title": "fix(browser): capture full resized PNGs and report true frame dimensions",
+          "state": "closed",
+          "merged_at": "2026-10-30T22:08:40Z",
+          "head": "2818ba90f43e4883484e85ccc09c7b05d18ecbde",
+          "source_branch": "pmarius/fix-canvas-browser-frame-dimensions",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 16,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-11-01T00:26:48Z",
+          "head": "90846fede968c5c3f2dc96f18009e22f07044a0a",
+          "source_branch": "df-main/v0.291.7",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 14,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T10:13:43Z",
+          "head": "cd2a805678e0ed50d57f0e92d73c0c2981277752",
+          "source_branch": "df-main/v0.291.5",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 12,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T06:20:58Z",
+          "head": "16800b2e52f422d9743f0ed81053e1a467067ede",
+          "source_branch": "df-main/v0.291.0",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 10,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": null,
+          "head": "79217bb6105b3b9717f24be48cade4e709164da1",
+          "source_branch": "df-main/v0.290.1",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 8,
+          "title": "chore(df): adopt v0.288.1",
+          "state": "closed",
+          "merged_at": "2026-10-11T16:00:55Z",
+          "head": "8e0d9e5ab8d1c6d48df343f81ef0ff25b6ddda59",
+          "source_branch": "darkfactory/release-v0.288.1",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 6,
+          "title": "fix(browser): emit a real resized PNG without repaint dependency",
+          "state": "closed",
+          "merged_at": "2026-10-11T15:30:19Z",
+          "head": "571cd874c04ecfa653a17eaf78bff403d8ee6db0",
+          "source_branch": "fix/browser-resize-frame-5",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 4,
+          "title": "chore(df): adopt v0.288.0",
+          "state": "closed",
+          "merged_at": "2026-10-11T15:33:41Z",
+          "head": "14ebc0f2b2b9c0064a193c4d2965bedf265e090c",
+          "source_branch": "darkfactory/release-v0.288.0",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 2,
+          "title": "chore(df): adopt DarkFactory v0.3.3",
+          "state": "closed",
+          "merged_at": "2026-10-11T10:47:32Z",
+          "head": "21878ea9b34f5e82841c2f612b7400423e0dde08",
+          "source_branch": "darkfactory/release-v0.3.3",
+          "base": "main",
+          "draft": false
+        }
+      ],
+      "issues": [
+        {
+          "number": 36,
+          "title": "DFWEB-P0-C — Exact tri-source capability crosswalk and GPL/license audit (T014, T016)",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 35,
+          "title": "DFWEB-P0-B — Accept RSC-03 security PR #25 and reconcile RSC-01 (#23) (T006)",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 34,
+          "title": "DFWEB-P0-A — Verify GHCode import and preserve full Canvas/template ancestry (T005, T010–T013)",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 32,
+          "title": "Review DarkFactory v0.292.4 on default branch",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 31,
+          "title": "DarkFactory-web: consolidate RSCode + GHCode + Canvas into one application",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 30,
+          "title": "RSC-07: Diagnose Windows packaged Chromium and harden distribution acceptance/provenance",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 29,
+          "title": "RSC-06: Windows runtime portability — filesystem, terminal PTY and graceful lifecycle",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 27,
+          "title": "RSC-05: Reproducible installable macOS, Windows and Linux preview distributions",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 26,
+          "title": "RSC-04: Make concurrent Chromium screencast startup single-flight and restart-safe",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 24,
+          "title": "RSC-01: Harden privileged local runtime boundaries",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 22,
+          "title": "Complete Canvas viewport navigation and local Git write workflows",
+          "state": "closed",
+          "closed_at": "2026-11-01T00:48:52Z"
+        },
+        {
+          "number": 19,
+          "title": "Canvas v0.1.0 readiness: local API security, data safety, UX audit and release verification",
+          "state": "closed",
+          "closed_at": "2026-10-30T22:26:39Z"
+        },
+        {
+          "number": 18,
+          "title": "Browser viewport resize can emit PNGs with incorrect dimensions",
+          "state": "closed",
+          "closed_at": "2026-10-30T22:08:41Z"
+        },
+        {
+          "number": 15,
+          "title": "Install/update DarkFactory v0.291.7 on default branch",
+          "state": "closed",
+          "closed_at": "2026-11-01T00:26:50Z"
+        },
+        {
+          "number": 13,
+          "title": "Install/update DarkFactory v0.291.5 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T10:13:44Z"
+        },
+        {
+          "number": 11,
+          "title": "Install/update DarkFactory v0.291.0 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T06:20:59Z"
+        },
+        {
+          "number": 9,
+          "title": "Install/update DarkFactory v0.290.1 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T10:22:35Z"
+        },
+        {
+          "number": 7,
+          "title": "Install/update DarkFactory v0.288.1",
+          "state": "closed",
+          "closed_at": "2026-10-11T16:00:56Z"
+        },
+        {
+          "number": 5,
+          "title": "Ensure Chromium screencast emits a frame immediately after viewport resize",
+          "state": "closed",
+          "closed_at": "2026-10-11T15:30:20Z"
+        },
+        {
+          "number": 3,
+          "title": "Install/update DarkFactory v0.288.0",
+          "state": "closed",
+          "closed_at": "2026-10-11T15:33:42Z"
+        },
+        {
+          "number": 1,
+          "title": "Install DarkFactory v0.3.3 (non-destructive)",
+          "state": "closed",
+          "closed_at": "2026-10-11T10:47:34Z"
+        }
+      ],
+      "releases": [
+        {
+          "tag": "v0.2.0",
+          "draft": false,
+          "prerelease": true,
+          "published": "2026-11-01T00:49:42Z",
+          "assets": [
+            {
+              "id": 696908582,
+              "name": "canvas-v0.2.0-source-web.tar.gz",
+              "size": 300013
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.0",
+          "draft": false,
+          "prerelease": true,
+          "published": "2026-10-30T22:27:29Z",
+          "assets": [
+            {
+              "id": 693607820,
+              "name": "canvas-v0.1.0-source-web.tar.gz",
+              "size": 292855
+            }
+          ]
+        }
+      ]
+    },
+    "marius-patrik/GHCode": {
+      "branches": [
+        {
+          "name": "agent/ghc-00-baseline",
+          "sha": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+          "protected": false
+        },
+        {
+          "name": "agent/ghc-01-identity-isolation",
+          "sha": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+          "protected": false
+        },
+        {
+          "name": "agent/ghc-02-transactional-v3",
+          "sha": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+          "protected": false
+        },
+        {
+          "name": "development",
+          "sha": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+          "protected": false
+        },
+        {
+          "name": "fix/ghc-09a-safe-branch-cleanup",
+          "sha": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+          "protected": false
+        },
+        {
+          "name": "main",
+          "sha": "534e2203425d91783111e5d02d5ec92649fec594",
+          "protected": false
+        }
+      ],
+      "prs": [
+        {
+          "number": 34,
+          "title": "feat(storage): transactional IndexedDB v3 foundation and recoverable legacy quarantine",
+          "state": "open",
+          "merged_at": null,
+          "head": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+          "source_branch": "agent/ghc-02-transactional-v3",
+          "base": "development",
+          "draft": true
+        },
+        {
+          "number": 33,
+          "title": "feat(identity): isolate verified principals and contain unattributed v2 data",
+          "state": "closed",
+          "merged_at": "2026-11-01T11:16:42Z",
+          "head": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+          "source_branch": "agent/ghc-01-identity-isolation",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 30,
+          "title": "test(ghc00): reproduce account, editor and IndexedDB integrity risks",
+          "state": "open",
+          "merged_at": null,
+          "head": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+          "source_branch": "agent/ghc-00-baseline",
+          "base": "development",
+          "draft": true
+        },
+        {
+          "number": 29,
+          "title": "fix(release): preserve unmerged work instead of deleting every branch",
+          "state": "closed",
+          "merged_at": "2026-11-01T02:37:39Z",
+          "head": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+          "source_branch": "fix/ghc-09a-safe-branch-cleanup",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 23,
+          "title": "fix(release): correct Rsbuild Pages static asset validation",
+          "state": "closed",
+          "merged_at": "2026-11-01T00:08:21Z",
+          "head": "10ece37242ef987e3b99ec9d9f9473012237596a",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 21,
+          "title": "release: unified GHCode workbench and Actions-only production site",
+          "state": "closed",
+          "merged_at": "2026-11-01T00:03:04Z",
+          "head": "8b182b9ea04f3c8ed953298566b0afd83cff16b4",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 20,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": null,
+          "head": "48f5cf5e5286300f08651eec0db478179514f884",
+          "source_branch": "df-main/v0.292.4",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 16,
+          "title": "feat: unify native GHCode workbench, factory and governed Actions release",
+          "state": "closed",
+          "merged_at": "2026-11-01T00:01:13Z",
+          "head": "109097091073d9d300d348c272d1de61d5e6feb5",
+          "source_branch": "feat/software-factory-workspace",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 15,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-17T10:58:30Z",
+          "head": "22336690c4422b02cef56c07a81be8f600f4c0db",
+          "source_branch": "df-main/v0.291.7",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 13,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T10:13:04Z",
+          "head": "e3974895863ff08102d31114fc3b87fa2f409a7a",
+          "source_branch": "df-main/v0.291.5",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 11,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T06:20:12Z",
+          "head": "67b63b4883e2543dba7dbed884f6698273fea538",
+          "source_branch": "df-main/v0.291.0",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 9,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": null,
+          "head": "7be2aaa81e91bac854713e547038519c784a6e24",
+          "source_branch": "df-main/v0.290.1",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 7,
+          "title": "chore(df): adopt v0.288.1",
+          "state": "closed",
+          "merged_at": "2026-10-11T16:00:06Z",
+          "head": "86493007d94e8ad1e54da5f963afe15f51cfe215",
+          "source_branch": "darkfactory/release-v0.288.1",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 5,
+          "title": "chore(df): adopt v0.288.0",
+          "state": "closed",
+          "merged_at": "2026-10-11T15:22:03Z",
+          "head": "9253f60f0721ae48365238dc408c268aceac3f32",
+          "source_branch": "darkfactory/release-v0.288.0",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 3,
+          "title": "chore(df): adopt released DarkFactory v0.3.3",
+          "state": "closed",
+          "merged_at": "2026-10-11T10:46:42Z",
+          "head": "e45e9dd9c1729e376a453834c46ff784f6eaed3e",
+          "source_branch": "darkfactory/release-v0.3.3",
+          "base": "main",
+          "draft": false
+        }
+      ],
+      "issues": [
+        {
+          "number": 36,
+          "title": "Consolidate Canvas into GHCode; retire template-repo web application",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 35,
+          "title": "GHC-02-SEC — Quarantined private-data export and unscoped session storage API",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 32,
+          "title": "GHC-CONTRACT-01 — Shared principal/resource identity and v3 integrity contract",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 31,
+          "title": "Review DarkFactory v0.292.4 on default branch",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 28,
+          "title": "GHC-09A — Remove unconditional release-time branch deletion",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 27,
+          "title": "GHC-03 — Durable DocumentService, Monaco model ownership, and guarded close",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 26,
+          "title": "GHC-02 — Transactional IndexedDB persistence and crash-safe migration",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 25,
+          "title": "GHC-01 — Account-scoped resource identity and safe legacy cache migration",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 24,
+          "title": "GHC-00 — Freeze v0.1.8 behavioral baseline and reproduce integrity risks",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 22,
+          "title": "Fix production Pages artifact directory validation",
+          "state": "closed",
+          "closed_at": "2026-11-01T00:08:22Z"
+        },
+        {
+          "number": 19,
+          "title": "Install/update DarkFactory v0.292.4 on default branch",
+          "state": "closed",
+          "closed_at": "2026-11-01T00:03:07Z"
+        },
+        {
+          "number": 18,
+          "title": "Enforce and verify native main branch protection",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 17,
+          "title": "Integrate Software Factory as GHCode's native specification and delta workspace",
+          "state": "closed",
+          "closed_at": "2026-11-01T00:03:06Z"
+        },
+        {
+          "number": 14,
+          "title": "Install/update DarkFactory v0.291.7 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-17T10:58:31Z"
+        },
+        {
+          "number": 12,
+          "title": "Install/update DarkFactory v0.291.5 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T10:13:05Z"
+        },
+        {
+          "number": 10,
+          "title": "Install/update DarkFactory v0.291.0 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T06:20:14Z"
+        },
+        {
+          "number": 8,
+          "title": "Install/update DarkFactory v0.290.1 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T10:21:20Z"
+        },
+        {
+          "number": 6,
+          "title": "Install/update DarkFactory v0.288.1",
+          "state": "closed",
+          "closed_at": "2026-10-11T16:00:08Z"
+        },
+        {
+          "number": 4,
+          "title": "Install/update DarkFactory v0.288.0",
+          "state": "closed",
+          "closed_at": "2026-10-11T15:22:04Z"
+        },
+        {
+          "number": 2,
+          "title": "Install DarkFactory v0.3.3 (non-destructive integration)",
+          "state": "closed",
+          "closed_at": "2026-10-11T10:46:43Z"
+        }
+      ],
+      "releases": [
+        {
+          "tag": "v0.1.8",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-11-01T00:11:35Z",
+          "assets": [
+            {
+              "id": 696838329,
+              "name": "ghcode-site.zip",
+              "size": 932547
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.7",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-17T11:00:03Z",
+          "assets": [
+            {
+              "id": 650242388,
+              "name": "ghcode-site.zip",
+              "size": 918478
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.6",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-14T10:15:25Z",
+          "assets": [
+            {
+              "id": 639998758,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.5",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-14T06:24:05Z",
+          "assets": [
+            {
+              "id": 639460386,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.4",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-11T16:01:35Z",
+          "assets": [
+            {
+              "id": 631165349,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.3",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-11T15:23:28Z",
+          "assets": [
+            {
+              "id": 631078380,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.2",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-11T11:27:44Z",
+          "assets": [
+            {
+              "id": 630571280,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.1",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-11T10:48:12Z",
+          "assets": [
+            {
+              "id": 630486240,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        },
+        {
+          "tag": "v0.1.0",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-11T10:35:48Z",
+          "assets": [
+            {
+              "id": 630461967,
+              "name": "ghcode-site.zip",
+              "size": 918281
+            }
+          ]
+        }
+      ]
+    },
+    "marius-patrik/DarkFactory-template": {
+      "branches": [
+        {
+          "name": "agent/canvas-c01-idb-foundation",
+          "sha": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+          "protected": false
+        },
+        {
+          "name": "agent/canvas-release-security-foundation",
+          "sha": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+          "protected": false
+        },
+        {
+          "name": "development",
+          "sha": "f647f7adc984db8231ba7ddf9ab19579ab340853",
+          "protected": false
+        },
+        {
+          "name": "df-main/v0.292.4",
+          "sha": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+          "protected": false
+        },
+        {
+          "name": "feat/stateless-repository-canvas",
+          "sha": "8158f703506414a13c03d7c38168b888f8127c08",
+          "protected": false
+        },
+        {
+          "name": "main",
+          "sha": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+          "protected": false
+        }
+      ],
+      "prs": [
+        {
+          "number": 42,
+          "title": "fix(ci): isolate Canvas release privileges and make PR quality read-only",
+          "state": "open",
+          "merged_at": null,
+          "head": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+          "source_branch": "agent/canvas-release-security-foundation",
+          "base": "development",
+          "draft": true
+        },
+        {
+          "number": 41,
+          "title": "feat(canvas): transactional IndexedDB persistence foundation (C01)",
+          "state": "open",
+          "merged_at": null,
+          "head": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+          "source_branch": "agent/canvas-c01-idb-foundation",
+          "base": "development",
+          "draft": true
+        },
+        {
+          "number": 39,
+          "title": "Canvas: source-first workspace redesign, focused graph and polished preferences",
+          "state": "closed",
+          "merged_at": "2026-11-01T13:31:34Z",
+          "head": "defe601e39d70ebb882cf6b4f39ebe9da8be3f64",
+          "source_branch": "feat/canvas-react-pages",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 37,
+          "title": "release: promote repository Canvas and agent plugin",
+          "state": "closed",
+          "merged_at": "2026-10-29T14:56:39Z",
+          "head": "0009efb3b2012ebda068b7d4fa9f0501d14fb0a0",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 36,
+          "title": "feat(canvas): repository-derived HTML view and agent plugin",
+          "state": "closed",
+          "merged_at": "2026-10-29T14:54:43Z",
+          "head": "2700f23cdbfc3bfb861e6d6e2be2174c913dfd17",
+          "source_branch": "feat/repository-canvas",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 34,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "open",
+          "merged_at": null,
+          "head": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+          "source_branch": "df-main/v0.292.4",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 32,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-17T18:15:17Z",
+          "head": "7b13e4e158df5de5e7206bcc5a4fd57bae34efce",
+          "source_branch": "df-main/v0.292.2",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 30,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-16T15:10:13Z",
+          "head": "925d1b998cffb2eb925c7e26d4320ad0613f0d8a",
+          "source_branch": "df-main/v0.291.7",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 28,
+          "title": "chore(df): promote v0.291.6 managed update to main",
+          "state": "closed",
+          "merged_at": "2026-10-14T10:17:53Z",
+          "head": "8387ca983d06e9c02d2390a6e49926482dfe142e",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 27,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T10:15:32Z",
+          "head": "4541cc881910d0a0171f9372a07d863537599600",
+          "source_branch": "df-main/v0.291.5",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 25,
+          "title": "chore(df): promote sealed main-only control update",
+          "state": "closed",
+          "merged_at": "2026-10-14T06:27:06Z",
+          "head": "c006e4b723d5d53a1c65eec12b1b15d354cfc08a",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 24,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T06:23:40Z",
+          "head": "b3d23455448ddf1212070f21a4650d1bdc4a3986",
+          "source_branch": "df-main/v0.291.4",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 22,
+          "title": "chore(df): promote managed single-branch update through development",
+          "state": "closed",
+          "merged_at": "2026-10-14T06:16:47Z",
+          "head": "b45d4268fa6573bbf1620cb1503d0c82d8318f47",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 21,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-14T06:13:06Z",
+          "head": "c5e0e73ec175f78cd670ec136eb2c8462884be6c",
+          "source_branch": "df-main/v0.291.1",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 19,
+          "title": "feat(df): deliver default-branch installation through protected development lane",
+          "state": "closed",
+          "merged_at": "2026-10-13T21:19:05Z",
+          "head": "2041c43d1c6466f9ea1c207c4867fc796c79c916",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 18,
+          "title": "feat(df): install managed configuration and workflows on main",
+          "state": "closed",
+          "merged_at": "2026-10-13T21:17:07Z",
+          "head": "08a391ef692510d2b9d422ab4c80f0d75ae33d1d",
+          "source_branch": "df-main/v0.291.0",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 15,
+          "title": "Release native GitHub layout and tag-only versioning",
+          "state": "closed",
+          "merged_at": "2026-10-13T19:25:42Z",
+          "head": "7cf31ffd5944a24f3755e890e62a983f99896433",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 14,
+          "title": "Restore native GitHub directories; pin DarkFactory submodule; default to tag releases",
+          "state": "closed",
+          "merged_at": "2026-10-13T19:25:03Z",
+          "head": "2b592ca54173e1b05b38aa21babf720f80613ac4",
+          "source_branch": "refactor/restore-native-github-and-tag-releases",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 12,
+          "title": "Release single .darkfactory tree and centralized tests",
+          "state": "closed",
+          "merged_at": "2026-10-13T19:10:27Z",
+          "head": "34637e566e366e5ae0391acef1e00f470b180bf5",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 11,
+          "title": "Consolidate repository metadata into .darkfactory and centralize all tests",
+          "state": "closed",
+          "merged_at": "2026-10-13T19:09:30Z",
+          "head": "02fee23081919ebbf29cebd6de8a9b4eca9b1ec6",
+          "source_branch": "refactor/darkfactory-single-tree",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 10,
+          "title": "Release TODO.md workspace root placement",
+          "state": "closed",
+          "merged_at": "2026-10-13T15:02:01Z",
+          "head": "cdc2dde81b568c0b5b257f981a1b72c3ee0674a0",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 9,
+          "title": "Move TODO.md into .agents root",
+          "state": "closed",
+          "merged_at": "2026-10-13T15:01:08Z",
+          "head": "493aabd1c5b470852bfeca2c957a87ddae6101e9",
+          "source_branch": "fix/todo-at-agents-root",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 8,
+          "title": "Release flattened agent workspace and role/skill catalog",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:50:37Z",
+          "head": "3e40e20271bbb428ba4781cf7b77b3d46057089e",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 7,
+          "title": "Flatten agent workspace sources and add portable agent/skill catalog",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:49:43Z",
+          "head": "879078735c40ac4e70d5cc21e62aac014916b394",
+          "source_branch": "refactor/agents-canonical-layout",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 6,
+          "title": "Release branch protection bootstrap and policy verification",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:39:39Z",
+          "head": "34c7218ac216a074ebaeb587535a9e1a3d48d506",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 5,
+          "title": "Add administrator-authenticated main protection bootstrap",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:38:53Z",
+          "head": "d1b46dc0e040b661a50057fe7eabccda60258501",
+          "source_branch": "chore/protection-bootstrap",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 3,
+          "title": "Promote durable development and version workflow fixes",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:22:33Z",
+          "head": "e99ec504da00811de1fd8d99979702288d001b11",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        },
+        {
+          "number": 2,
+          "title": "Keep the integration branch durable and version automation writable",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:20:58Z",
+          "head": "b13d41376fa2e491f68ea0fafb728287360acef4",
+          "source_branch": "fix/template-protection-policy",
+          "base": "development",
+          "draft": false
+        },
+        {
+          "number": 1,
+          "title": "Initialize repository template, generated governance, versioning and release workflows",
+          "state": "closed",
+          "merged_at": "2026-10-13T14:13:19Z",
+          "head": "3d77d6e21fe6c227209794c9cfd1ee6aa0424d8d",
+          "source_branch": "development",
+          "base": "main",
+          "draft": false
+        }
+      ],
+      "issues": [
+        {
+          "number": 40,
+          "title": "Canvas React workspace: verify CI and publish repository Pages preview",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 38,
+          "title": "Release repository Canvas framework to main",
+          "state": "closed",
+          "closed_at": "2026-10-29T14:56:41Z"
+        },
+        {
+          "number": 35,
+          "title": "Add repository-sourced Canvas and agent interaction plugin",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 33,
+          "title": "Install/update DarkFactory v0.292.4 on default branch",
+          "state": "open",
+          "closed_at": null
+        },
+        {
+          "number": 31,
+          "title": "Install/update DarkFactory v0.292.2 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-17T18:15:23Z"
+        },
+        {
+          "number": 29,
+          "title": "Install/update DarkFactory v0.291.7 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-16T15:10:15Z"
+        },
+        {
+          "number": 26,
+          "title": "Install/update DarkFactory v0.291.5 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T10:17:55Z"
+        },
+        {
+          "number": 23,
+          "title": "Install/update DarkFactory v0.291.4 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T06:27:07Z"
+        },
+        {
+          "number": 20,
+          "title": "Install/update DarkFactory v0.291.1 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T06:16:48Z"
+        },
+        {
+          "number": 17,
+          "title": "Install/update DarkFactory v0.291.0 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-13T21:19:06Z"
+        },
+        {
+          "number": 16,
+          "title": "Install/update DarkFactory v0.290.1 on default branch",
+          "state": "closed",
+          "closed_at": "2026-10-14T10:21:18Z"
+        },
+        {
+          "number": 13,
+          "title": "Restore supported GitHub Actions activation without duplicating .darkfactory sources",
+          "state": "closed",
+          "closed_at": "2026-10-13T19:26:46Z"
+        },
+        {
+          "number": 4,
+          "title": "Enable native main branch protection and required checks",
+          "state": "open",
+          "closed_at": null
+        }
+      ],
+      "releases": [
+        {
+          "tag": "v0.1.16",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-29T14:56:55Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.15",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-16T15:10:25Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.14",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-14T10:18:06Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.13",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-14T06:27:38Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.12",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-14T06:17:00Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.11",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T21:19:16Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.10",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T19:25:53Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.9",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T15:02:12Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.7",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T14:50:47Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.5",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T14:39:51Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.3",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T14:22:46Z",
+          "assets": []
+        },
+        {
+          "tag": "v0.1.1",
+          "draft": false,
+          "prerelease": false,
+          "published": "2026-10-13T14:13:31Z",
+          "assets": []
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Branch list captures currently visible heads only; earlier closed/deleted refs require Git history manifest coverage.",
+    "GitHub-hosted reviews/comments/releases are exported separately by GitHub Actions; this inventory is not the off-platform backup.",
+    "Secret values, private user storage, and privileged repository settings are deliberately not queried."
+  ]
+}

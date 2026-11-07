@@ -1,0 +1,952 @@
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, realpath, rm, stat } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { browserRuntimeUrl, browserStoredUrl } from "@/shared/browser";
+import type { BrowserSession } from "@/shared/schema";
+import { type BrowserContext, type CDPSession, type Dialog, type FileChooser, type Frame, type Page, chromium } from "playwright-chromium";
+
+type BrowserRenderer = "chromium";
+
+type BrowserViewport = {
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+};
+
+export type BrowserFrameMessage = {
+  type: "frame";
+  url: string;
+  image: string;
+  mimeType: "image/png";
+  renderer: BrowserRenderer;
+  width: number;
+  height: number;
+  ts: number;
+};
+
+export type BrowserStateMessage = {
+  type: "state";
+  browser: BrowserSession;
+  renderer: BrowserRenderer;
+  title?: string;
+  loading?: boolean;
+};
+
+export type BrowserErrorMessage = {
+  type: "error";
+  message: string;
+};
+
+export type BrowserDialogMessage = { type: "dialog"; kind: string; message: string; defaultValue: string };
+export type BrowserFileChooserMessage = { type: "fileChooser"; multiple: boolean };
+export type BrowserDownloadMessage = { type: "download"; filename: string; path: string };
+
+export type BrowserServerMessage =
+  | BrowserFrameMessage | BrowserStateMessage | BrowserErrorMessage
+  | BrowserDialogMessage | BrowserFileChooserMessage | BrowserDownloadMessage;
+
+export type BrowserViewportMessage = {
+  type: "viewport";
+  width: number;
+  height: number;
+  deviceScaleFactor?: number;
+};
+
+export type BrowserMouseMessage = {
+  type: "mouse";
+  event: "move" | "down" | "up" | "dblclick";
+  x: number;
+  y: number;
+  button?: "left" | "middle" | "right";
+  modifiers?: BrowserModifiers;
+};
+
+export type BrowserWheelMessage = {
+  type: "wheel";
+  x: number;
+  y: number;
+  deltaX: number;
+  deltaY: number;
+  modifiers?: BrowserModifiers;
+};
+
+export type BrowserKeyMessage = {
+  type: "key";
+  event: "down" | "up";
+  key: string;
+  code?: string;
+  modifiers?: BrowserModifiers;
+};
+
+export type BrowserInteractionMessage =
+  | BrowserViewportMessage
+  | BrowserMouseMessage
+  | BrowserWheelMessage
+  | BrowserKeyMessage
+  | { type: "text"; text: string }
+  | { type: "paste"; text: string }
+  | { type: "reload"; url?: string }
+  | { type: "navigate"; url: string; replace?: boolean }
+  | { type: "click"; x: number; y: number; button?: "left" | "middle" | "right" }
+  | { type: "type"; text: string }
+  | { type: "dialogResponse"; accept: boolean; promptText?: string }
+  | { type: "chooseFiles"; paths?: string[]; files?: Array<{ name: string; mimeType: string; data: string }> };
+
+export type BrowserStreamSubscriber = {
+  send: (message: BrowserServerMessage) => void | Promise<void>;
+  onNavigation?: (url: string, title: string) => Promise<BrowserSession>;
+};
+
+export type BrowserStreamHandle = {
+  close: () => void;
+};
+
+type BrowserModifiers = number | string[];
+
+type LiveBrowser = {
+  context: BrowserContext;
+  page: Page;
+  cdp: CDPSession;
+  session: BrowserSession;
+  currentUrl: string | null;
+  title: string;
+  loading: boolean;
+  viewport: BrowserViewport;
+  screencastStarted: boolean;
+  screencastStarting: Promise<void> | null;
+  lastFrame: BrowserFrameMessage | null;
+  subscribers: Map<number, BrowserStreamSubscriber>;
+  persistSubscriberId: number | null;
+  pendingDialog: Dialog | null;
+  pendingFileChooser: FileChooser | null;
+  idleTimer: ReturnType<typeof setTimeout> | null;
+};
+
+type ScreencastEvent = {
+  data: string;
+  sessionId: number;
+};
+
+const DEFAULT_VIEWPORT: BrowserViewport = { width: 1280, height: 720, deviceScaleFactor: 1 };
+const MAX_VIEWPORT = { width: 4096, height: 4096 };
+const MAX_ACTIVE_BROWSERS = 24;
+const MAX_SAVED_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+
+export class BrowserFrameService {
+  readonly executablePath = findChromiumExecutable();
+  private readonly liveBrowsers = new Map<string, Promise<LiveBrowser>>();
+  private readonly closingBrowsers = new Set<Promise<void>>();
+  // Serialize slot reservation/eviction so concurrent browser subscriptions
+  // cannot all observe a free slot and exceed the Chromium context limit.
+  private allocationQueue: Promise<void> = Promise.resolve();
+  private closing = false;
+  private nextSubscriberId = 1;
+
+  constructor(
+    private readonly profilesRoot: string,
+    private readonly log: (line: string) => void | Promise<void>,
+    private readonly idleTimeoutMs = 60_000,
+  ) {}
+
+  async stream(session: BrowserSession, subscriber: BrowserStreamSubscriber): Promise<BrowserStreamHandle> {
+    const live = await this.liveBrowserFor(session);
+    live.session = session;
+    if (live.idleTimer) clearTimeout(live.idleTimer);
+    live.idleTimer = null;
+    const subscriberId = this.nextSubscriberId++;
+    live.subscribers.set(subscriberId, subscriber);
+    if (subscriber.onNavigation && live.persistSubscriberId === null) live.persistSubscriberId = subscriberId;
+
+    const handle: BrowserStreamHandle = {
+      close: () => {
+        if (!live.subscribers.delete(subscriberId)) return;
+        if (live.subscribers.size === 0) {
+          const dialog = live.pendingDialog;
+          live.pendingDialog = null;
+          if (dialog) void dialog.dismiss().catch(() => undefined);
+          const chooser = live.pendingFileChooser;
+          live.pendingFileChooser = null;
+          if (chooser) void chooser.setFiles([]).catch(() => undefined);
+          // Do not retain orphan Chromium processes after a disconnected pane.
+          live.idleTimer = setTimeout(() => {
+            if (live.subscribers.size !== 0) return;
+            this.liveBrowsers.delete(session.profilePath);
+            const closing = live.context.close().catch(() => undefined);
+            this.closingBrowsers.add(closing);
+            void closing.finally(() => this.closingBrowsers.delete(closing));
+          }, this.idleTimeoutMs);
+          live.idleTimer.unref();
+        }
+        if (live.persistSubscriberId === subscriberId) {
+          live.persistSubscriberId = null;
+          for (const [id, candidate] of live.subscribers) {
+            if (!candidate.onNavigation) continue;
+            live.persistSubscriberId = id;
+            break;
+          }
+        }
+      },
+    };
+
+    try {
+      await this.startScreencast(live);
+      await this.ensurePageUrl(live, session.url);
+      // about:blank does not always repaint after screencast activation.
+      // Make an explicit initial capture so a new pane never waits forever for CDP frames.
+      if (!live.lastFrame || live.lastFrame.url !== browserStoredUrl(live.page.url())) {
+        await this.captureInitialFrame(live);
+      }
+      await this.sendToSubscriber(subscriber, await this.stateForLive(live));
+      if (live.lastFrame) await this.sendToSubscriber(subscriber, live.lastFrame);
+      return handle;
+    } catch (error) {
+      handle.close();
+      throw error;
+    }
+  }
+
+  async frameFor(session: BrowserSession): Promise<BrowserFrameMessage> {
+    return new Promise((resolveFrame, rejectFrame) => {
+      let settled = false;
+      let handle: BrowserStreamHandle | null = null;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        handle?.close();
+        rejectFrame(new Error("timed out waiting for browser screencast frame"));
+      }, 8_000);
+      void this.stream(session, {
+        send: (message) => {
+          if (settled || message.type !== "frame") return;
+          settled = true;
+          clearTimeout(timer);
+          handle?.close();
+          resolveFrame(message);
+        },
+      })
+        .then((streamHandle) => {
+          handle = streamHandle;
+          if (settled) handle.close();
+        })
+        .catch((error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          rejectFrame(error);
+        });
+    });
+  }
+
+  async stateFor(session: BrowserSession): Promise<BrowserStateMessage> {
+    const live = await this.liveBrowserFor(session);
+    live.session = session;
+    await this.ensurePageUrl(live, session.url);
+    return this.stateForLive(live);
+  }
+
+  async interact(session: BrowserSession, message: BrowserInteractionMessage): Promise<void> {
+    const live = await this.liveBrowserFor(session);
+    live.session = session;
+    await this.startScreencast(live);
+
+    // Complete blocking browser UI before any further page navigation.
+    if (message.type === "dialogResponse") {
+      const dialog = live.pendingDialog;
+      live.pendingDialog = null;
+      if (dialog) {
+        if (message.accept) await dialog.accept(message.promptText);
+        else await dialog.dismiss();
+        await this.updateTitle(live);
+        await this.broadcastState(live);
+      }
+      return;
+    }
+    if (message.type === "chooseFiles") {
+      const paths = message.paths ?? [];
+      const files = message.files ?? [];
+      if (paths.length + files.length > 20 ||
+        paths.some((path) => !isAbsolute(path) || path.includes(String.fromCharCode(0))) ||
+        files.some((file) =>
+          !file.name || !file.mimeType || file.name.includes(String.fromCharCode(0)) ||
+          file.data.length > 8_000_000 || !validBase64(file.data)
+        ) ||
+        files.reduce((sum, file) => sum + file.data.length, 0) > 12_000_000) {
+        throw new Error("file chooser rejected invalid paths or oversized files");
+      }
+      const chooser = live.pendingFileChooser;
+      live.pendingFileChooser = null;
+      if (chooser) {
+        if (files.length > 0) {
+          await chooser.setFiles(files.map((file) => ({
+            name: basename(file.name.replaceAll("\\\\", "/")),
+            mimeType: file.mimeType,
+            buffer: Buffer.from(file.data, "base64"),
+          })));
+        } else {
+          await chooser.setFiles(paths);
+        }
+        await this.updateTitle(live);
+        await this.broadcastState(live);
+      }
+      return;
+    }
+
+    if (message.type === "viewport") {
+      await this.setViewport(live, message);
+      await this.broadcastState(live);
+      return;
+    }
+
+    if (message.type === "navigate") {
+      await this.ensurePageUrl(live, message.url);
+      await this.broadcastState(live);
+      return;
+    }
+
+    await this.ensurePageUrl(live, session.url);
+    if (message.type === "reload") {
+      if (message.url) await this.ensurePageUrl(live, message.url);
+      live.loading = true;
+      await this.broadcastState(live);
+      await live.page.reload({ waitUntil: "domcontentloaded", timeout: 12_000 }).catch(() => undefined);
+    } else if (message.type === "mouse") {
+      await this.dispatchMouse(live, message);
+    } else if (message.type === "click") {
+      await this.dispatchLegacyClick(live, message);
+    } else if (message.type === "wheel") {
+      await this.dispatchWheel(live, message);
+    } else if (message.type === "key") {
+      await this.dispatchKey(live, message);
+    } else if (message.type === "text" || message.type === "type") {
+      await live.cdp.send("Input.insertText", { text: message.text });
+    } else if (message.type === "paste") {
+      await this.dispatchPaste(live, message.text);
+    }
+
+    // Reading the page title while a JavaScript dialog is open can block indefinitely.
+    if (live.pendingDialog) return;
+    await live.page.waitForLoadState("domcontentloaded", { timeout: 1_000 }).catch(() => undefined);
+    await this.updateTitle(live);
+    await this.broadcastState(live);
+  }
+
+  async close(): Promise<void> {
+    this.closing = true;
+    await this.allocationQueue;
+    const liveBrowsers = await Promise.allSettled(this.liveBrowsers.values());
+    this.liveBrowsers.clear();
+    await Promise.all(
+      liveBrowsers.map(async (result) => {
+        if (result.status !== "fulfilled") return;
+        if (result.value.idleTimer) clearTimeout(result.value.idleTimer);
+        await result.value.context.close().catch(() => undefined);
+      }),
+    );
+    await Promise.all(this.closingBrowsers);
+  }
+
+  private async liveBrowserFor(session: BrowserSession): Promise<LiveBrowser> {
+    if (this.closing) throw new Error("browser service is shutting down");
+    const key = session.profilePath;
+    const current = this.liveBrowsers.get(key);
+    if (current) return current;
+
+    const predecessor = this.allocationQueue;
+    let release!: () => void;
+    this.allocationQueue = new Promise<void>((resolveQueue) => {
+      release = resolveQueue;
+    });
+    await predecessor;
+    try {
+      if (this.closing) throw new Error("browser service is shutting down");
+      // Another subscriber might have reserved this profile while we waited.
+      const alreadyPending = this.liveBrowsers.get(key);
+      if (alreadyPending) return alreadyPending;
+      // Reclaim disconnected contexts before refusing another browser pane.
+      // This entire reservation/eviction sequence runs under allocationQueue.
+      for (const [profilePath, candidate] of this.liveBrowsers) {
+        if (this.liveBrowsers.size < MAX_ACTIVE_BROWSERS) break;
+        const existing = await candidate.catch(() => null);
+        if (!existing || existing.subscribers.size !== 0) continue;
+        if (existing.idleTimer) clearTimeout(existing.idleTimer);
+        this.liveBrowsers.delete(profilePath);
+        await existing.context.close().catch(() => undefined);
+      }
+      if (this.liveBrowsers.size >= MAX_ACTIVE_BROWSERS) throw new Error("too many active Chromium profiles");
+      const pending = this.createLiveBrowser(session).catch((error) => {
+        this.liveBrowsers.delete(key);
+        throw error;
+      });
+      this.liveBrowsers.set(key, pending);
+      return pending;
+    } finally {
+      // Do not hold the reservation lock while Chromium itself initializes.
+      release();
+    }
+  }
+
+  private async createLiveBrowser(session: BrowserSession): Promise<LiveBrowser> {
+    // Workspace and pane identifiers are user-controlled persistence keys.
+    // Their encoded representation can still contain '..' path segments.
+    const profile = resolve(session.profilePath);
+    const profilesRoot = resolve(this.profilesRoot);
+    if (!isWithinDirectory(profilesRoot, profile)) {
+      throw new Error("browser profile is outside the browser profiles directory");
+    }
+    const executablePath = this.requireExecutablePath();
+    await mkdir(profilesRoot, { recursive: true });
+    await mkdir(profile, { recursive: true });
+    const realRoot = await realpath(profilesRoot);
+    const realProfile = await realpath(profile);
+    if (!isWithinDirectory(realRoot, realProfile)) {
+      throw new Error("browser profile resolves outside the browser profiles directory");
+    }
+    const userDataDir = join(profile, "chromium");
+    await mkdir(userDataDir, { recursive: true });
+    if (!isWithinDirectory(realRoot, await realpath(userDataDir))) {
+      throw new Error("Chromium user-data directory resolves outside browser profiles");
+    }
+    await clearChromiumSingletonFiles(userDataDir);
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      executablePath,
+      headless: true,
+      viewport: { width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height },
+      deviceScaleFactor: DEFAULT_VIEWPORT.deviceScaleFactor,
+      // Invalid TLS certificates must not be silently accepted by a privileged browser.
+      ignoreHTTPSErrors: process.env.CANVAS_BROWSER_IGNORE_HTTPS_ERRORS === "1",
+      acceptDownloads: true,
+      args: [
+        "--disable-background-networking",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--no-default-browser-check",
+        "--no-first-run",
+      ],
+    });
+    try {
+      const page = context.pages()[0] ?? (await context.newPage());
+      await page.setViewportSize({ width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height });
+      // A newly created about:blank tab may not have a painted compositor surface.
+      // Establish a real blank document while preserving its native about:blank URL.
+      if (page.url() === "about:blank") {
+        await page.setContent("<!doctype html><html><head><title>Blank</title></head><body></body></html>", {
+          waitUntil: "domcontentloaded",
+        });
+      }
+      const cdp = await context.newCDPSession(page);
+      const live: LiveBrowser = {
+        context,
+        page,
+        cdp,
+        session,
+        currentUrl: null,
+        title: session.title,
+        loading: false,
+        viewport: DEFAULT_VIEWPORT,
+        screencastStarted: false,
+        screencastStarting: null,
+        lastFrame: null,
+        subscribers: new Map(),
+        persistSubscriberId: null,
+        pendingDialog: null,
+        pendingFileChooser: null,
+        idleTimer: null,
+      };
+      this.bindPageEvents(live);
+      return live;
+    } catch (error) {
+      await context.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private bindPageEvents(live: LiveBrowser): void {
+    live.page.on("dialog", (dialog) => {
+      if (live.subscribers.size === 0) {
+        this.runBackground(dialog.dismiss(), "dialog dismissal");
+        return;
+      }
+      live.pendingDialog = dialog;
+      this.runBackground(this.broadcast(live, {
+        type: "dialog", kind: dialog.type(), message: dialog.message(), defaultValue: dialog.defaultValue(),
+      }), "dialog notification");
+    });
+    live.page.on("filechooser", (chooser) => {
+      if (live.subscribers.size === 0) {
+        this.runBackground(chooser.setFiles([]), "file chooser cancellation");
+        return;
+      }
+      live.pendingFileChooser = chooser;
+      this.runBackground(this.broadcast(live, { type: "fileChooser", multiple: chooser.isMultiple() }), "file chooser notification");
+    });
+    live.page.on("download", (download) => {
+      this.runBackground((async () => {
+        try {
+          const directory = join(this.profilesRoot, "downloads");
+          await mkdir(directory, { recursive: true });
+          const filename = basename(download.suggestedFilename()) || "download";
+          const path = join(directory, `${randomUUID()}-${filename}`);
+          await download.saveAs(path);
+          if ((await stat(path)).size > MAX_SAVED_DOWNLOAD_BYTES) {
+            await rm(path, { force: true });
+            throw new Error("download exceeds 100 MiB local retention limit");
+          }
+          await this.broadcast(live, { type: "download", filename, path });
+        } catch (error) {
+          // Do not forward Chromium's filesystem/OS exceptions over the stream.
+          try {
+            await this.log(`browser download failed: ${errorMessage(error)}`);
+          } catch {
+            // Reporting a download error must not prevent the safe client reply.
+          }
+          await this.broadcast(live, { type: "error", message: "Download failed. Check browser service logs." });
+        }
+      })(), "download handling");
+    });
+    live.page.on("request", (request) => {
+      if (!request.isNavigationRequest() || request.frame() !== live.page.mainFrame()) return;
+      live.loading = true;
+      this.runBackground(this.broadcastState(live), "navigation request notification");
+    });
+    live.page.on("domcontentloaded", () => {
+      live.loading = false;
+      this.runBackground(this.updateTitle(live).then(() => this.broadcastState(live)), "DOMContentLoaded notification");
+    });
+    live.page.on("load", () => {
+      live.loading = false;
+      this.runBackground(this.updateTitle(live).then(() => this.broadcastState(live)), "load notification");
+    });
+    live.page.on("framenavigated", (frame) => {
+      if (!isMainFrame(live.page, frame)) return;
+      this.runBackground(this.handleNavigation(live), "navigation persistence");
+    });
+    live.page.on("crash", () => {
+      void this.broadcast(live, { type: "error", message: "Chromium page crashed." });
+    });
+  }
+
+  private async startScreencast(live: LiveBrowser): Promise<void> {
+    if (live.screencastStarted) return;
+    // A boolean set before the first await incorrectly lets other subscribers
+    // navigate and capture while CDP initialization is still unfinished.
+    if (live.screencastStarting) return live.screencastStarting;
+    const start = (async () => {
+      const onFrame = (event: unknown) => {
+        this.runBackground(this.handleScreencastFrame(live, event as ScreencastEvent), "screencast frame");
+      };
+      try {
+        await live.cdp.send("Page.enable");
+        if (this.closing) throw new Error("browser service is shutting down");
+        live.cdp.on("Page.screencastFrame", onFrame);
+        await live.cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+        if (this.closing) throw new Error("browser service is shutting down");
+        live.screencastStarted = true;
+      } catch (error) {
+        live.cdp.off("Page.screencastFrame", onFrame);
+        live.screencastStarted = false;
+        throw error;
+      }
+    })();
+    live.screencastStarting = start;
+    try {
+      await start;
+    } finally {
+      if (live.screencastStarting === start) live.screencastStarting = null;
+    }
+  }
+
+  private async captureInitialFrame(live: LiveBrowser): Promise<void> {
+    const result = (await live.cdp.send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+      fromSurface: true,
+      clip: { x: 0, y: 0, width: live.viewport.width, height: live.viewport.height, scale: 1 },
+    })) as { data: string };
+    const dimensions = pngDimensions(result.data);
+    if (!dimensions) throw new Error("Chromium initial screenshot did not produce a valid PNG");
+    const frame: BrowserFrameMessage = {
+      type: "frame",
+      url: browserStoredUrl(live.page.url()),
+      image: `data:image/png;base64,${result.data}`,
+      mimeType: "image/png",
+      renderer: "chromium",
+      width: dimensions.width,
+      height: dimensions.height,
+      ts: Date.now(),
+    };
+    live.currentUrl = live.page.url();
+    live.lastFrame = frame;
+    await this.broadcast(live, frame);
+  }
+
+  private async handleScreencastFrame(live: LiveBrowser, event: ScreencastEvent): Promise<void> {
+    try {
+      // Chromium's screencast metadata may describe a requested viewport while
+      // its encoded PNG still contains an older compositor surface.
+      const dimensions = pngDimensions(event.data);
+      if (!dimensions) {
+        await this.log("browser chromium screencast produced an invalid PNG frame");
+        return;
+      }
+      const frame: BrowserFrameMessage = {
+        type: "frame",
+        url: browserStoredUrl(live.page.url()),
+        image: `data:image/png;base64,${event.data}`,
+        mimeType: "image/png",
+        renderer: "chromium",
+        width: dimensions.width,
+        height: dimensions.height,
+        ts: Date.now(),
+      };
+      live.currentUrl = live.page.url();
+      live.lastFrame = frame;
+      await this.broadcast(live, frame);
+    } finally {
+      await live.cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }).catch(async (error) => {
+        await this.log(`browser chromium screencast ack failed: ${errorMessage(error)}`);
+      });
+    }
+  }
+
+  private async ensurePageUrl(live: LiveBrowser, url: string): Promise<void> {
+    const targetUrl = browserRuntimeUrl(url);
+    // CDP screencast timestamps can lag the actual page URL. Do not navigate a second
+    // time merely because the cached screencast URL is stale during user interaction.
+    if (live.page.url() === targetUrl) {
+      live.currentUrl = targetUrl;
+      return;
+    }
+    live.loading = true;
+    await this.broadcastState(live);
+    await live.page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 12_000 });
+    live.currentUrl = live.page.url();
+    live.loading = false;
+    await this.updateTitle(live);
+  }
+
+  private async setViewport(live: LiveBrowser, message: BrowserViewportMessage): Promise<void> {
+    const viewport = sanitizeViewport(message);
+    if (
+      viewport.width === live.viewport.width &&
+      viewport.height === live.viewport.height &&
+      viewport.deviceScaleFactor === live.viewport.deviceScaleFactor
+    ) {
+      return;
+    }
+    live.viewport = viewport;
+    await live.page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await live.cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: viewport.deviceScaleFactor,
+      mobile: false,
+    });
+
+    // Force the requested capture rectangle; Chromium can temporarily expose
+    // a shorter compositor surface immediately after a viewport resize.
+    // Never publish claimed dimensions unless the PNG actually matches them.
+    let data = "";
+    let actual: { width: number; height: number } | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = (await live.cdp.send("Page.captureScreenshot", {
+        format: "png",
+        captureBeyondViewport: true,
+        fromSurface: true,
+        clip: { x: 0, y: 0, width: viewport.width, height: viewport.height, scale: 1 },
+      })) as { data: string };
+      data = result.data;
+      actual = pngDimensions(data);
+      if (actual?.width === viewport.width && actual.height === viewport.height) break;
+      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!actual || actual.width !== viewport.width || actual.height !== viewport.height) {
+      throw new Error(
+        `Chromium resize capture dimensions: expected ${viewport.width}x${viewport.height}, got ${actual ? `${actual.width}x${actual.height}` : "invalid PNG"}`,
+      );
+    }
+    const frame: BrowserFrameMessage = {
+      type: "frame",
+      url: browserStoredUrl(live.page.url()),
+      image: `data:image/png;base64,${data}`,
+      mimeType: "image/png",
+      renderer: "chromium",
+      width: actual.width,
+      height: actual.height,
+      ts: Date.now(),
+    };
+    live.currentUrl = live.page.url();
+    live.lastFrame = frame;
+    await this.broadcast(live, frame);
+  }
+
+  private async dispatchMouse(live: LiveBrowser, message: BrowserMouseMessage): Promise<void> {
+    const button = message.button ?? "left";
+    const point = viewportPoint(live, message.x, message.y);
+    const eventType =
+      message.event === "move"
+        ? "mouseMoved"
+        : message.event === "down"
+          ? "mousePressed"
+          : message.event === "up"
+            ? "mouseReleased"
+            : "mousePressed";
+    await live.cdp.send("Input.dispatchMouseEvent", {
+      type: eventType,
+      x: point.x,
+      y: point.y,
+      button,
+      clickCount: message.event === "dblclick" ? 2 : 1,
+      modifiers: modifiersMask(message.modifiers),
+    });
+    if (message.event === "dblclick") {
+      await live.cdp.send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: point.x,
+        y: point.y,
+        button,
+        clickCount: 2,
+        modifiers: modifiersMask(message.modifiers),
+      });
+    }
+  }
+
+  private async dispatchLegacyClick(
+    live: LiveBrowser,
+    message: { type: "click"; x: number; y: number; button?: "left" | "middle" | "right" },
+  ): Promise<void> {
+    const point = viewportPoint(live, message.x, message.y);
+    await live.cdp.send("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: point.x,
+      y: point.y,
+      button: message.button ?? "left",
+      clickCount: 1,
+    });
+    await live.cdp.send("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: point.x,
+      y: point.y,
+      button: message.button ?? "left",
+      clickCount: 1,
+    });
+  }
+
+  private async dispatchWheel(live: LiveBrowser, message: BrowserWheelMessage): Promise<void> {
+    const point = viewportPoint(live, message.x, message.y);
+    await live.cdp.send("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: point.x,
+      y: point.y,
+      deltaX: message.deltaX,
+      deltaY: message.deltaY,
+      modifiers: modifiersMask(message.modifiers),
+    });
+  }
+
+  private async dispatchKey(live: LiveBrowser, message: BrowserKeyMessage): Promise<void> {
+    const type = message.event === "down" ? "keyDown" : "keyUp";
+    await live.cdp.send("Input.dispatchKeyEvent", {
+      type,
+      key: message.key,
+      code: message.code ?? message.key,
+      windowsVirtualKeyCode: virtualKeyCode(message.key),
+      nativeVirtualKeyCode: virtualKeyCode(message.key),
+      modifiers: modifiersMask(message.modifiers),
+    });
+  }
+
+  private async dispatchPaste(live: LiveBrowser, text: string): Promise<void> {
+    await live.page.evaluate((value) => {
+      const active = document.activeElement;
+      const target = active instanceof HTMLElement ? active : document.body;
+      const data = new DataTransfer();
+      data.setData("text/plain", value);
+      const event = new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: data,
+      });
+      const accepted = target.dispatchEvent(event);
+      if (accepted) document.execCommand("insertText", false, value);
+    }, text);
+  }
+
+  private async handleNavigation(live: LiveBrowser): Promise<void> {
+    live.currentUrl = live.page.url();
+    live.loading = false;
+    await this.updateTitle(live);
+    const url = browserStoredUrl(live.page.url());
+    if (url !== live.session.url) {
+      const subscriber = live.persistSubscriberId === null ? null : live.subscribers.get(live.persistSubscriberId);
+      if (subscriber?.onNavigation) {
+        live.session = await subscriber.onNavigation(url, live.title);
+      }
+    }
+    await this.broadcastState(live);
+  }
+
+  private async updateTitle(live: LiveBrowser): Promise<void> {
+    live.title = (await live.page.title().catch(() => "")) || live.session.title;
+  }
+
+  private async stateForLive(live: LiveBrowser): Promise<BrowserStateMessage> {
+    await this.updateTitle(live);
+    return {
+      type: "state",
+      browser: live.session,
+      renderer: "chromium",
+      title: live.title,
+      loading: live.loading,
+    };
+  }
+
+  private async broadcastState(live: LiveBrowser): Promise<void> {
+    await this.broadcast(live, await this.stateForLive(live));
+  }
+
+  private async broadcast(live: LiveBrowser, message: BrowserServerMessage): Promise<void> {
+    await Promise.all([...live.subscribers.values()].map((subscriber) => this.sendToSubscriber(subscriber, message)));
+  }
+
+  private async sendToSubscriber(subscriber: BrowserStreamSubscriber, message: BrowserServerMessage): Promise<void> {
+    await subscriber.send(message);
+  }
+
+  private runBackground(promise: Promise<unknown>, activity: string): void {
+    void promise.catch(async (error) => {
+      try {
+        await this.log(`browser ${activity} failed: ${errorMessage(error)}`);
+      } catch {
+        // Detached event handlers must never create unhandled rejections.
+      }
+    });
+  }
+
+  private requireExecutablePath(): string {
+    if (!this.executablePath) {
+      throw new Error("Chromium executable not found. Install Playwright Chromium or set CHROMIUM_EXECUTABLE_PATH.");
+    }
+    return this.executablePath;
+  }
+}
+
+function findChromiumExecutable(): string | null {
+  const candidates = [
+    process.env.CHROMIUM_EXECUTABLE_PATH,
+    safePlaywrightChromiumPath(),
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function safePlaywrightChromiumPath(): string | null {
+  try {
+    const path = chromium.executablePath();
+    return existsSync(path) ? path : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeViewport(message: BrowserViewportMessage): BrowserViewport {
+  return {
+    width: clamp(Math.floor(message.width), 1, MAX_VIEWPORT.width),
+    height: clamp(Math.floor(message.height), 1, MAX_VIEWPORT.height),
+    deviceScaleFactor: clamp(message.deviceScaleFactor ?? 1, 0.25, 4),
+  };
+}
+
+function viewportPoint(live: LiveBrowser, x: number, y: number): { x: number; y: number } {
+  return {
+    x: clamp(x, 0, live.viewport.width),
+    y: clamp(y, 0, live.viewport.height),
+  };
+}
+
+function modifiersMask(modifiers: BrowserModifiers | undefined): number {
+  if (typeof modifiers === "number" && Number.isFinite(modifiers)) return Math.floor(modifiers);
+  if (!Array.isArray(modifiers)) return 0;
+  let mask = 0;
+  if (modifiers.includes("Alt")) mask |= 1;
+  if (modifiers.includes("Control")) mask |= 2;
+  if (modifiers.includes("Meta")) mask |= 4;
+  if (modifiers.includes("Shift")) mask |= 8;
+  return mask;
+}
+
+function virtualKeyCode(key: string): number {
+  if (key.length === 1) return key.toUpperCase().charCodeAt(0);
+  const known: Record<string, number> = {
+    Backspace: 8,
+    Tab: 9,
+    Enter: 13,
+    Shift: 16,
+    Control: 17,
+    Alt: 18,
+    Escape: 27,
+    Space: 32,
+    " ": 32,
+    ArrowLeft: 37,
+    ArrowUp: 38,
+    ArrowRight: 39,
+    ArrowDown: 40,
+    Delete: 46,
+  };
+  return known[key] ?? 0;
+}
+
+function isMainFrame(page: Page, frame: Frame): boolean {
+  return frame === page.mainFrame();
+}
+
+function pngDimensions(base64: string): { width: number; height: number } | null {
+  // The first 32 base64 characters cover the PNG signature and IHDR dimensions.
+  const header = Buffer.from(base64.slice(0, 32), "base64");
+  if (
+    header.length < 24 ||
+    header.toString("hex", 0, 8) !== "89504e470d0a1a0a" ||
+    header.toString("ascii", 12, 16) !== "IHDR"
+  ) {
+    return null;
+  }
+  const width = header.readUInt32BE(16);
+  const height = header.readUInt32BE(20);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isWithinDirectory(root: string, child: string): boolean {
+  const rel = relative(root, child);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+function validBase64(value: string): boolean {
+  // Empty files are legitimate uploads: their Base64 representation is empty.
+  if (value.length % 4 !== 0) return false;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return false;
+  return Buffer.from(value, "base64").toString("base64") === value;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function clearChromiumSingletonFiles(profilePath: string): Promise<void> {
+  await Promise.all(
+    ["SingletonCookie", "SingletonLock", "SingletonSocket"].map((name) =>
+      rm(join(profilePath, name), { force: true, recursive: true }),
+    ),
+  );
+}

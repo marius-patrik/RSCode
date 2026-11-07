@@ -1,0 +1,77 @@
+{
+  "repo": {
+    "identity": {
+      "owner": "marius-patrik",
+      "repo": "GHCode",
+      "display_name": "GHCode",
+      "default_branch": "main",
+      "development_branch": "development",
+      "project_title": "GHCode"
+    },
+    "license": {
+      "spdx": "GPL-3.0",
+      "holder": "Patrik Marius",
+      "year": "2026"
+    },
+    "upstream": {
+      "repo": "marius-patrik/DarkFactory",
+      "ref": "9ec623964a4d441097bbc85fe8366a9447b82b93"
+    },
+    "protection": {
+      "lanes": [
+        {
+          "branch": "main",
+          "required_checks": [
+            "main-source",
+            "generated-docs"
+          ],
+          "approvals": 1,
+          "enforce_admins": true,
+          "strict": true,
+          "resolve_conversations": true
+        }
+      ]
+    },
+    "areas": {
+      "$default": "ui",
+      "ui": {
+        "description": "Unified workbench, styling, navigation",
+        "keywords": [
+          "workbench",
+          "design",
+          "ui",
+          "layout"
+        ]
+      },
+      "docs": {
+        "description": "Canonical specifications and governance",
+        "keywords": [
+          "prd",
+          "architecture",
+          "docs",
+          "rule"
+        ]
+      },
+      "ci": {
+        "description": "GitHub Actions and GitHub Pages",
+        "keywords": [
+          "pages",
+          "ci",
+          "release"
+        ]
+      }
+    },
+    "versioning": {
+      "mode": "tags"
+    },
+    "board": {
+      "global": "Global",
+      "boards": [
+        "Global",
+        "GHCode"
+      ]
+    }
+  },
+  "docs": {},
+  "providers": {}
+}

@@ -2,6 +2,15 @@ name: Canvas release
 on:
   push:
     branches: [main]
+    # Inert migrate/ and provenance-only merges MUST NOT publish application releases.
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "package.json"
+      - "bun.lock"
+      - "rsbuild.config.ts"
+      - "tsconfig.json"
+      - "docs/RELEASE_NOTES.md"
   workflow_dispatch:
 
 permissions:

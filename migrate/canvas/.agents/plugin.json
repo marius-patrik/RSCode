@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "name": "repository-canvas",
+  "kind": "repository-scoped-agent-plugin",
+  "description": "Optional agent guidance for the sole React Canvas Pages application and canonical repository records.",
+  "authority": "Git-tracked repository files only",
+  "interface": ".github/app/",
+  "build_output": ".canvas-dist/index.html",
+  "skills": [
+    ".agents/skills/repository-canvas/SKILL.md"
+  ],
+  "tools": [
+    {
+      "name": "canvas.context",
+      "command": "node .github/app/scripts/generate-context.mjs"
+    },
+    {
+      "name": "canvas.build",
+      "command": "cd .github/app && bun run build"
+    },
+    {
+      "name": "canvas.check",
+      "command": "cd .github/app && bun run check"
+    },
+    {
+      "name": "docs.write",
+      "command": "python3 .github/scripts/generate_documents.py --write"
+    },
+    {
+      "name": "docs.check",
+      "command": "python3 .github/scripts/generate_documents.py --check"
+    }
+  ],
+  "hooks": {
+    "agent_session_start": ".agents/hooks/session-start.sh",
+    "git_pre_commit": ".agents/hooks/pre-commit",
+    "regenerate_after_repo_edit": ".agents/hooks/after-change.sh"
+  },
+  "limitations": [
+    "Manifest is repository-local, not an installed ChatGPT plugin or a registered MCP server.",
+    "No automatic ChatGPT turn hooks or remote agent service are provided.",
+    "Only authorized source-control operations may change repository facts; published Pages is read-only.",
+    "Canvas is in an open, user-controlled prototyping phase."
+  ]
+}

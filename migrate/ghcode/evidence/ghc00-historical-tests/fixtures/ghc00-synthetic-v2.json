@@ -1,0 +1,157 @@
+{
+  "fixtureVersion": 1,
+  "description": "Synthetic GHCode IndexedDB v2 migration input; no tokens or real repository data.",
+  "database": {
+    "name": "darkfactory-workbench",
+    "version": 2,
+    "stores": [
+      "workspaces",
+      "blobs",
+      "overlays",
+      "staged",
+      "committed",
+      "commits"
+    ],
+    "recentLocalStorageKey": "workbench-recent-workspaces-v1"
+  },
+  "identities": [
+    {
+      "fixtureAccount": "account-A",
+      "login": "synthetic-a",
+      "repositoryAccess": [
+        "acme/private"
+      ],
+      "id": 10001,
+      "principalId": "gh:github.com:10001"
+    },
+    {
+      "fixtureAccount": "account-B",
+      "login": "synthetic-b",
+      "repositoryAccess": [],
+      "id": 20002,
+      "principalId": "gh:github.com:20002"
+    }
+  ],
+  "workspaces": [
+    {
+      "version": 2,
+      "id": "acme/private@main",
+      "repository": {
+        "id": 42,
+        "name": "private",
+        "fullName": "acme/private",
+        "owner": "acme",
+        "private": true,
+        "defaultBranch": "main",
+        "htmlUrl": "https://github.com/acme/private",
+        "canPush": true
+      },
+      "ref": "main",
+      "baseSha": "1111111111111111111111111111111111111111",
+      "treeSha": "2222222222222222222222222222222222222222",
+      "tree": [
+        {
+          "path": "README.md",
+          "mode": "100644",
+          "type": "blob",
+          "sha": "3333333333333333333333333333333333333333",
+          "size": 20
+        }
+      ],
+      "updatedAt": 1793504400000
+    }
+  ],
+  "blobs": [
+    {
+      "key": "acme/private@main:3333333333333333333333333333333333333333",
+      "workspaceId": "acme/private@main",
+      "sha": "3333333333333333333333333333333333333333",
+      "content": "# SYNTHETIC_PRIVATE_A\n",
+      "updatedAt": 1793504400000
+    }
+  ],
+  "overlays": [
+    {
+      "key": "acme/private@main:README.md",
+      "workspaceId": "acme/private@main",
+      "path": "README.md",
+      "status": "modified",
+      "content": "# SYNTHETIC_DRAFT_A\n",
+      "baseSha": "3333333333333333333333333333333333333333",
+      "updatedAt": 1793504400000
+    }
+  ],
+  "staged": [
+    {
+      "key": "acme/private@main:README.md",
+      "workspaceId": "acme/private@main",
+      "path": "README.md",
+      "status": "modified",
+      "content": "# SYNTHETIC_DRAFT_A\n",
+      "baseSha": "3333333333333333333333333333333333333333",
+      "updatedAt": 1793504400000,
+      "stagedAt": 1793504400001
+    }
+  ],
+  "committed": [
+    {
+      "key": "acme/private@main:README.md",
+      "workspaceId": "acme/private@main",
+      "path": "README.md",
+      "content": "# SYNTHETIC_COMMIT_A\n",
+      "deleted": false,
+      "baseSha": "3333333333333333333333333333333333333333",
+      "updatedAt": 1793504400002
+    }
+  ],
+  "commits": [
+    {
+      "id": "acme/private@main:local:1793504400002:fixture-1",
+      "workspaceId": "acme/private@main",
+      "message": "synthetic commit",
+      "createdAt": 1793504400002,
+      "files": [
+        {
+          "key": "acme/private@main:README.md",
+          "workspaceId": "acme/private@main",
+          "path": "README.md",
+          "status": "modified",
+          "content": "# SYNTHETIC_COMMIT_A\n",
+          "baseSha": "3333333333333333333333333333333333333333",
+          "updatedAt": 1793504400002
+        }
+      ]
+    }
+  ],
+  "localStorage": {
+    "workbench-recent-workspaces-v1": [
+      {
+        "version": 2,
+        "id": "acme/private@main",
+        "repository": {
+          "id": 42,
+          "name": "private",
+          "fullName": "acme/private",
+          "owner": "acme",
+          "private": true,
+          "defaultBranch": "main",
+          "htmlUrl": "https://github.com/acme/private",
+          "canPush": true
+        },
+        "ref": "main",
+        "baseSha": "1111111111111111111111111111111111111111",
+        "treeSha": "2222222222222222222222222222222222222222",
+        "tree": [
+          {
+            "path": "README.md",
+            "mode": "100644",
+            "type": "blob",
+            "sha": "3333333333333333333333333333333333333333",
+            "size": 20
+          }
+        ],
+        "updatedAt": 1793504400000
+      }
+    ]
+  }
+}

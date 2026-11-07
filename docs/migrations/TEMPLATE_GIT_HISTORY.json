@@ -1,0 +1,258 @@
+{
+  "source": "marius-patrik/DarkFactory-template",
+  "target": "marius-patrik/DarkFactory-web",
+  "method": "multi-parent no-squash ancestry import",
+  "sourceMain": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+  "originalHistoryPolicy": "Retain original commit SHAs and every fetched branch, tag and pull/head in DarkFactory-web ancestry.",
+  "integrationPolicy": "Import is history-only. No DarkFactory-template runtime code is enabled until separately audited and adapted into the RSCode architecture.",
+  "unsafeSourceCandidates": [
+    {
+      "ref": "refs/remotes/template/agent/ghc-02-transactional-v3",
+      "reason": "PR #34 failed independent principal-isolation and push-queue review. Preserve history, do not enable as production code."
+    }
+  ],
+  "counts": {
+    "refs": 47,
+    "uniqueTipCommits": 43,
+    "branches": 6,
+    "pullHeadRefs": 29,
+    "tags": 12
+  },
+  "refs": [
+    {
+      "ref": "refs/remotes/template-pr/1",
+      "object": "3d77d6e21fe6c227209794c9cfd1ee6aa0424d8d",
+      "commit": "3d77d6e21fe6c227209794c9cfd1ee6aa0424d8d"
+    },
+    {
+      "ref": "refs/remotes/template-pr/10",
+      "object": "cdc2dde81b568c0b5b257f981a1b72c3ee0674a0",
+      "commit": "cdc2dde81b568c0b5b257f981a1b72c3ee0674a0"
+    },
+    {
+      "ref": "refs/remotes/template-pr/11",
+      "object": "02fee23081919ebbf29cebd6de8a9b4eca9b1ec6",
+      "commit": "02fee23081919ebbf29cebd6de8a9b4eca9b1ec6"
+    },
+    {
+      "ref": "refs/remotes/template-pr/12",
+      "object": "34637e566e366e5ae0391acef1e00f470b180bf5",
+      "commit": "34637e566e366e5ae0391acef1e00f470b180bf5"
+    },
+    {
+      "ref": "refs/remotes/template-pr/14",
+      "object": "2b592ca54173e1b05b38aa21babf720f80613ac4",
+      "commit": "2b592ca54173e1b05b38aa21babf720f80613ac4"
+    },
+    {
+      "ref": "refs/remotes/template-pr/15",
+      "object": "7cf31ffd5944a24f3755e890e62a983f99896433",
+      "commit": "7cf31ffd5944a24f3755e890e62a983f99896433"
+    },
+    {
+      "ref": "refs/remotes/template-pr/18",
+      "object": "08a391ef692510d2b9d422ab4c80f0d75ae33d1d",
+      "commit": "08a391ef692510d2b9d422ab4c80f0d75ae33d1d"
+    },
+    {
+      "ref": "refs/remotes/template-pr/19",
+      "object": "2041c43d1c6466f9ea1c207c4867fc796c79c916",
+      "commit": "2041c43d1c6466f9ea1c207c4867fc796c79c916"
+    },
+    {
+      "ref": "refs/remotes/template-pr/2",
+      "object": "b13d41376fa2e491f68ea0fafb728287360acef4",
+      "commit": "b13d41376fa2e491f68ea0fafb728287360acef4"
+    },
+    {
+      "ref": "refs/remotes/template-pr/21",
+      "object": "c5e0e73ec175f78cd670ec136eb2c8462884be6c",
+      "commit": "c5e0e73ec175f78cd670ec136eb2c8462884be6c"
+    },
+    {
+      "ref": "refs/remotes/template-pr/22",
+      "object": "b45d4268fa6573bbf1620cb1503d0c82d8318f47",
+      "commit": "b45d4268fa6573bbf1620cb1503d0c82d8318f47"
+    },
+    {
+      "ref": "refs/remotes/template-pr/24",
+      "object": "b3d23455448ddf1212070f21a4650d1bdc4a3986",
+      "commit": "b3d23455448ddf1212070f21a4650d1bdc4a3986"
+    },
+    {
+      "ref": "refs/remotes/template-pr/25",
+      "object": "c006e4b723d5d53a1c65eec12b1b15d354cfc08a",
+      "commit": "c006e4b723d5d53a1c65eec12b1b15d354cfc08a"
+    },
+    {
+      "ref": "refs/remotes/template-pr/27",
+      "object": "4541cc881910d0a0171f9372a07d863537599600",
+      "commit": "4541cc881910d0a0171f9372a07d863537599600"
+    },
+    {
+      "ref": "refs/remotes/template-pr/28",
+      "object": "8387ca983d06e9c02d2390a6e49926482dfe142e",
+      "commit": "8387ca983d06e9c02d2390a6e49926482dfe142e"
+    },
+    {
+      "ref": "refs/remotes/template-pr/3",
+      "object": "e99ec504da00811de1fd8d99979702288d001b11",
+      "commit": "e99ec504da00811de1fd8d99979702288d001b11"
+    },
+    {
+      "ref": "refs/remotes/template-pr/30",
+      "object": "925d1b998cffb2eb925c7e26d4320ad0613f0d8a",
+      "commit": "925d1b998cffb2eb925c7e26d4320ad0613f0d8a"
+    },
+    {
+      "ref": "refs/remotes/template-pr/32",
+      "object": "7b13e4e158df5de5e7206bcc5a4fd57bae34efce",
+      "commit": "7b13e4e158df5de5e7206bcc5a4fd57bae34efce"
+    },
+    {
+      "ref": "refs/remotes/template-pr/34",
+      "object": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+      "commit": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9"
+    },
+    {
+      "ref": "refs/remotes/template-pr/36",
+      "object": "2700f23cdbfc3bfb861e6d6e2be2174c913dfd17",
+      "commit": "2700f23cdbfc3bfb861e6d6e2be2174c913dfd17"
+    },
+    {
+      "ref": "refs/remotes/template-pr/37",
+      "object": "0009efb3b2012ebda068b7d4fa9f0501d14fb0a0",
+      "commit": "0009efb3b2012ebda068b7d4fa9f0501d14fb0a0"
+    },
+    {
+      "ref": "refs/remotes/template-pr/39",
+      "object": "defe601e39d70ebb882cf6b4f39ebe9da8be3f64",
+      "commit": "defe601e39d70ebb882cf6b4f39ebe9da8be3f64"
+    },
+    {
+      "ref": "refs/remotes/template-pr/41",
+      "object": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+      "commit": "bf17d45c8068a3bda8de5d4786a829bb4c511a86"
+    },
+    {
+      "ref": "refs/remotes/template-pr/42",
+      "object": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+      "commit": "5f462ea6e73c570e483149d6846dcc9190c09d51"
+    },
+    {
+      "ref": "refs/remotes/template-pr/5",
+      "object": "d1b46dc0e040b661a50057fe7eabccda60258501",
+      "commit": "d1b46dc0e040b661a50057fe7eabccda60258501"
+    },
+    {
+      "ref": "refs/remotes/template-pr/6",
+      "object": "34c7218ac216a074ebaeb587535a9e1a3d48d506",
+      "commit": "34c7218ac216a074ebaeb587535a9e1a3d48d506"
+    },
+    {
+      "ref": "refs/remotes/template-pr/7",
+      "object": "879078735c40ac4e70d5cc21e62aac014916b394",
+      "commit": "879078735c40ac4e70d5cc21e62aac014916b394"
+    },
+    {
+      "ref": "refs/remotes/template-pr/8",
+      "object": "3e40e20271bbb428ba4781cf7b77b3d46057089e",
+      "commit": "3e40e20271bbb428ba4781cf7b77b3d46057089e"
+    },
+    {
+      "ref": "refs/remotes/template-pr/9",
+      "object": "493aabd1c5b470852bfeca2c957a87ddae6101e9",
+      "commit": "493aabd1c5b470852bfeca2c957a87ddae6101e9"
+    },
+    {
+      "ref": "refs/remotes/template/agent/canvas-c01-idb-foundation",
+      "object": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+      "commit": "bf17d45c8068a3bda8de5d4786a829bb4c511a86"
+    },
+    {
+      "ref": "refs/remotes/template/agent/canvas-release-security-foundation",
+      "object": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+      "commit": "5f462ea6e73c570e483149d6846dcc9190c09d51"
+    },
+    {
+      "ref": "refs/remotes/template/development",
+      "object": "f647f7adc984db8231ba7ddf9ab19579ab340853",
+      "commit": "f647f7adc984db8231ba7ddf9ab19579ab340853"
+    },
+    {
+      "ref": "refs/remotes/template/df-main/v0.292.4",
+      "object": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+      "commit": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9"
+    },
+    {
+      "ref": "refs/remotes/template/feat/stateless-repository-canvas",
+      "object": "8158f703506414a13c03d7c38168b888f8127c08",
+      "commit": "8158f703506414a13c03d7c38168b888f8127c08"
+    },
+    {
+      "ref": "refs/remotes/template/main",
+      "object": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+      "commit": "63a6e0e0c044deead678a7f7c7a3551450eda8b2"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.1",
+      "object": "9b3336e2054ffadc6505e4a7b2380a81aad50d06",
+      "commit": "9b3336e2054ffadc6505e4a7b2380a81aad50d06"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.10",
+      "object": "ebc1fc23bc26ddcbf14a14579b5f12cfaf09c098",
+      "commit": "ebc1fc23bc26ddcbf14a14579b5f12cfaf09c098"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.11",
+      "object": "9b86206cfc9e7a83dbb3fea1c96a35a170682a27",
+      "commit": "9b86206cfc9e7a83dbb3fea1c96a35a170682a27"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.12",
+      "object": "f8267de05ea91bd033cc495dbb7425d9da959426",
+      "commit": "f8267de05ea91bd033cc495dbb7425d9da959426"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.13",
+      "object": "a4445374f2f78a0bb6f88f3685f6ba383d1108be",
+      "commit": "a4445374f2f78a0bb6f88f3685f6ba383d1108be"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.14",
+      "object": "83d7eca30a8ebfe4bc1b7de77c0540fd9f885106",
+      "commit": "83d7eca30a8ebfe4bc1b7de77c0540fd9f885106"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.15",
+      "object": "040ebe548b2d18a287cd91b6c5c31e71655ea040",
+      "commit": "040ebe548b2d18a287cd91b6c5c31e71655ea040"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.16",
+      "object": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+      "commit": "63a6e0e0c044deead678a7f7c7a3551450eda8b2"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.3",
+      "object": "4c4a9387c0eceda3760e373b569338caba7996f9",
+      "commit": "4c4a9387c0eceda3760e373b569338caba7996f9"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.5",
+      "object": "5fc9b1663582bcd07c95d5d9fc438003e93131f2",
+      "commit": "5fc9b1663582bcd07c95d5d9fc438003e93131f2"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.7",
+      "object": "10702bd4519f485c5411911538f6895f23512e1f",
+      "commit": "10702bd4519f485c5411911538f6895f23512e1f"
+    },
+    {
+      "ref": "refs/tags/template/v0.1.9",
+      "object": "6ba71f0fec3fceb83d5f81e84bbd3f9862a3c3ea",
+      "commit": "6ba71f0fec3fceb83d5f81e84bbd3f9862a3c3ea"
+    }
+  ]
+}

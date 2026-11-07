@@ -1,0 +1,173 @@
+{
+  "source": "marius-patrik/GHCode",
+  "target": "marius-patrik/RSCode",
+  "method": "multi-parent no-squash ancestry import",
+  "sourceMain": "534e2203425d91783111e5d02d5ec92649fec594",
+  "originalHistoryPolicy": "Retain original commit SHAs and every fetched branch, tag and pull/head in RSCode ancestry.",
+  "integrationPolicy": "Import is history-only. No GHCode runtime code is enabled until separately audited and adapted into the RSCode architecture.",
+  "unsafeSourceCandidates": [
+    {
+      "ref": "refs/remotes/ghcode/agent/ghc-02-transactional-v3",
+      "reason": "PR #34 failed independent principal-isolation and push-queue review. Preserve history, do not enable as production code."
+    }
+  ],
+  "counts": {
+    "refs": 30,
+    "uniqueTipCommits": 25,
+    "branches": 6,
+    "pullHeadRefs": 15,
+    "tags": 9
+  },
+  "refs": [
+    {
+      "ref": "refs/remotes/ghcode-pr/11",
+      "object": "67b63b4883e2543dba7dbed884f6698273fea538",
+      "commit": "67b63b4883e2543dba7dbed884f6698273fea538"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/13",
+      "object": "e3974895863ff08102d31114fc3b87fa2f409a7a",
+      "commit": "e3974895863ff08102d31114fc3b87fa2f409a7a"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/15",
+      "object": "22336690c4422b02cef56c07a81be8f600f4c0db",
+      "commit": "22336690c4422b02cef56c07a81be8f600f4c0db"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/16",
+      "object": "109097091073d9d300d348c272d1de61d5e6feb5",
+      "commit": "109097091073d9d300d348c272d1de61d5e6feb5"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/20",
+      "object": "48f5cf5e5286300f08651eec0db478179514f884",
+      "commit": "48f5cf5e5286300f08651eec0db478179514f884"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/21",
+      "object": "8b182b9ea04f3c8ed953298566b0afd83cff16b4",
+      "commit": "8b182b9ea04f3c8ed953298566b0afd83cff16b4"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/23",
+      "object": "10ece37242ef987e3b99ec9d9f9473012237596a",
+      "commit": "10ece37242ef987e3b99ec9d9f9473012237596a"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/29",
+      "object": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+      "commit": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/3",
+      "object": "e45e9dd9c1729e376a453834c46ff784f6eaed3e",
+      "commit": "e45e9dd9c1729e376a453834c46ff784f6eaed3e"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/30",
+      "object": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+      "commit": "7b82a9f8ed199747a7959184b3ed208a464e1480"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/33",
+      "object": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+      "commit": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/34",
+      "object": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+      "commit": "49d194f75eccd919401d10bf1ef3f0df34ca9a34"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/5",
+      "object": "9253f60f0721ae48365238dc408c268aceac3f32",
+      "commit": "9253f60f0721ae48365238dc408c268aceac3f32"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/7",
+      "object": "86493007d94e8ad1e54da5f963afe15f51cfe215",
+      "commit": "86493007d94e8ad1e54da5f963afe15f51cfe215"
+    },
+    {
+      "ref": "refs/remotes/ghcode-pr/9",
+      "object": "7be2aaa81e91bac854713e547038519c784a6e24",
+      "commit": "7be2aaa81e91bac854713e547038519c784a6e24"
+    },
+    {
+      "ref": "refs/remotes/ghcode/agent/ghc-00-baseline",
+      "object": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+      "commit": "7b82a9f8ed199747a7959184b3ed208a464e1480"
+    },
+    {
+      "ref": "refs/remotes/ghcode/agent/ghc-01-identity-isolation",
+      "object": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+      "commit": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded"
+    },
+    {
+      "ref": "refs/remotes/ghcode/agent/ghc-02-transactional-v3",
+      "object": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+      "commit": "49d194f75eccd919401d10bf1ef3f0df34ca9a34"
+    },
+    {
+      "ref": "refs/remotes/ghcode/development",
+      "object": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+      "commit": "7801784b5bb596dcc720a48b7085443fc8f9ca3f"
+    },
+    {
+      "ref": "refs/remotes/ghcode/fix/ghc-09a-safe-branch-cleanup",
+      "object": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+      "commit": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d"
+    },
+    {
+      "ref": "refs/remotes/ghcode/main",
+      "object": "534e2203425d91783111e5d02d5ec92649fec594",
+      "commit": "534e2203425d91783111e5d02d5ec92649fec594"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.0",
+      "object": "7587582fc2164c7800215afdb24523eb6311e465",
+      "commit": "7587582fc2164c7800215afdb24523eb6311e465"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.1",
+      "object": "f03ab58c014a85faf0d213a124accf38ad16e07f",
+      "commit": "f03ab58c014a85faf0d213a124accf38ad16e07f"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.2",
+      "object": "ebfde874e1f81ae2a4141cf366a005874bf525cf",
+      "commit": "ebfde874e1f81ae2a4141cf366a005874bf525cf"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.3",
+      "object": "95703439660cd9dd17822a4a6d3256f97ed16872",
+      "commit": "95703439660cd9dd17822a4a6d3256f97ed16872"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.4",
+      "object": "e5d92b256c3b1f1d90656f9a5c9d2aeca9812b18",
+      "commit": "e5d92b256c3b1f1d90656f9a5c9d2aeca9812b18"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.5",
+      "object": "c50d52a3ba6c15eb60f9c1802b1a4f5773320a77",
+      "commit": "c50d52a3ba6c15eb60f9c1802b1a4f5773320a77"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.6",
+      "object": "195458b67c8feac470db6b608a7be71b524111b1",
+      "commit": "195458b67c8feac470db6b608a7be71b524111b1"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.7",
+      "object": "12db8b781e28e2a003ea90b94fb1d256a889bed3",
+      "commit": "12db8b781e28e2a003ea90b94fb1d256a889bed3"
+    },
+    {
+      "ref": "refs/tags/ghcode/v0.1.8",
+      "object": "534e2203425d91783111e5d02d5ec92649fec594",
+      "commit": "534e2203425d91783111e5d02d5ec92649fec594"
+    }
+  ]
+}

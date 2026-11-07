@@ -1,0 +1,162 @@
+import type { ComponentType, HTMLAttributes, SVGProps } from "react";
+import * as AnimatedIcons from "lucide-animated";
+import {
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  Code2,
+  Columns2,
+  Braces,
+  Eye,
+  File,
+  FileCode2,
+  Files,
+  FileText,
+  Folder,
+  FolderTree,
+  Home,
+  GitBranch,
+  Languages,
+  List,
+  ListTree,
+  Maximize,
+  Minimize,
+  Minus,
+  Moon,
+  Plus,
+  Settings,
+  PanelBottomOpen,
+  PanelLeft,
+  PanelsLeftRight,
+  PanelRight,
+  PanelRightOpen,
+  Rows2,
+  Square,
+  PencilLine,
+  RefreshCw,
+  Sun,
+  SunMoon,
+  X,
+} from "lucide-react";
+
+type AnimatedIconProps = HTMLAttributes<HTMLDivElement> & {
+  names: string | string[];
+};
+
+type LucideAnimatedComponent = ComponentType<
+  HTMLAttributes<HTMLDivElement> & {
+    size?: number;
+    animateOnHover?: boolean;
+  }
+>;
+
+type LucideStaticComponent = ComponentType<
+  SVGProps<SVGSVGElement> & {
+    size?: number | string;
+  }
+>;
+
+const STATIC_FALLBACKS: Record<string, LucideStaticComponent> = {
+  BookOpen,
+  BookOpenIcon: BookOpen,
+  Braces,
+  BracesIcon: Braces,
+  Eye,
+  EyeIcon: Eye,
+  File,
+  FileIcon: File,
+  CheckCircle2,
+  CheckCircle2Icon: CheckCircle2,
+  Circle,
+  CircleIcon: Circle,
+  Code2,
+  Code2Icon: Code2,
+  Columns2,
+  Columns2Icon: Columns2,
+  FileCode2,
+  FileCode2Icon: FileCode2,
+  Files,
+  FilesIcon: Files,
+  FileText,
+  FileTextIcon: FileText,
+  Folder,
+  FolderIcon: Folder,
+  FolderTree,
+  FolderTreeIcon: FolderTree,
+  Home,
+  HomeIcon: Home,
+  GitBranch,
+  GitBranchIcon: GitBranch,
+  Languages,
+  LanguagesIcon: Languages,
+  List,
+  ListIcon: List,
+  ListTree,
+  ListTreeIcon: ListTree,
+  PencilLine,
+  PencilLineIcon: PencilLine,
+  PanelLeft,
+  PanelLeftIcon: PanelLeft,
+  PanelLeftRight: PanelsLeftRight,
+  PanelLeftRightIcon: PanelsLeftRight,
+  PanelsLeftRight,
+  PanelsLeftRightIcon: PanelsLeftRight,
+  PanelRight,
+  PanelRightIcon: PanelRight,
+  PanelRightOpen,
+  PanelRightOpenIcon: PanelRightOpen,
+  PanelBottomOpen,
+  PanelBottomOpenIcon: PanelBottomOpen,
+  Rows2,
+  Rows2Icon: Rows2,
+  Square,
+  SquareIcon: Square,
+  Maximize,
+  MaximizeIcon: Maximize,
+  Minimize,
+  MinimizeIcon: Minimize,
+  Minus,
+  MinusIcon: Minus,
+  Moon,
+  MoonIcon: Moon,
+  Plus,
+  PlusIcon: Plus,
+  Settings,
+  SettingsIcon: Settings,
+  Sun,
+  SunIcon: Sun,
+  SunMoon,
+  SunMoonIcon: SunMoon,
+  X,
+  XIcon: X,
+  RefreshCw,
+  RefreshCwIcon: RefreshCw,
+};
+
+export function AnimatedIcon({ names, className, ...props }: AnimatedIconProps) {
+  const candidates = Array.isArray(names) ? names : [names];
+  const glyphSize = 13;
+  const animatedRegistry = AnimatedIcons as unknown as Record<string, LucideAnimatedComponent>;
+
+  const Animated = candidates.map((name) => animatedRegistry[name]).find(Boolean);
+  if (Animated) {
+    return (
+      <Animated
+        size={glyphSize}
+        animateOnHover
+        className={className}
+        aria-hidden="true"
+        {...props}
+      />
+    );
+  }
+
+  const Static = candidates
+    .flatMap((name) => [name, name.replace(/Icon$/, "")])
+    .map((name) => STATIC_FALLBACKS[name])
+    .find(Boolean);
+
+  if (!Static) return null;
+
+  return <Static size={glyphSize} className={className} aria-hidden="true" focusable="false" />;
+}

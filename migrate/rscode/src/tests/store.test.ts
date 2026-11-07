@@ -1,0 +1,452 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { appendFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { lookupHandler } from "@/server/api";
+import type { AppContext } from "@/server/api";
+import { CanvasStore, createFsFile } from "@/server/store";
+import { INTERNAL_BLANK_BROWSER_URL } from "@/shared/browser";
+import { type BrowserPaneState, DEFAULT_THEME_COLORS, DEFAULT_WORKSPACE_SETTINGS, type Workspace } from "@/shared/schema";
+
+let canvasHome = "";
+
+beforeEach(async () => {
+  canvasHome = await mkdtemp(join(tmpdir(), "canvas-store-"));
+  process.env.CANVAS_HOME = canvasHome;
+});
+
+afterEach(async () => {
+  process.env.CANVAS_HOME = undefined;
+  if (canvasHome) await rm(canvasHome, { recursive: true, force: true });
+});
+
+test("creates and persists an initial workspace", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+
+  const list = await store.listWorkspaces();
+  expect(list.workspaces).toHaveLength(1);
+  expect(list.workspaces[0]?.label).toBe("Workspace 1");
+  expect(list.workspaces[0]?.rootPath).toBe(process.cwd());
+
+  const active = await store.getActiveWorkspace();
+  expect(active.id).toBe(list.activeWorkspaceId);
+  expect(active.rootPath).toBe(process.cwd());
+  expect(active.activeView).toBe("panes");
+  expect(active.settings).toEqual(DEFAULT_WORKSPACE_SETTINGS);
+  expect(active.panes[0]?.type).toBe("explorer");
+  expect(active.tiledLayout?.type).toBe("leaf");
+  if (active.tiledLayout?.type === "leaf") {
+    expect(active.tiledLayout.paneIds).toEqual([active.panes[0]!.id]);
+    expect(active.tiledLayout.activePaneId).toBe(active.panes[0]!.id);
+  }
+});
+
+test("creating an existing file never destroys its contents", async () => {
+  const file = join(canvasHome, "important.md");
+  await writeFile(file, "important original contents\n");
+  await expect(createFsFile(file, "markdown")).rejects.toThrow();
+  expect(await readFile(file, "utf8")).toBe("important original contents\n");
+
+  const created = join(canvasHome, "new.md");
+  expect(await createFsFile(created, "markdown")).toBe(created);
+  expect(await readFile(created, "utf8")).toBe("# untitled\n");
+});
+
+test("workspace creation accepts host-native absolute paths, including Windows drive roots", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const created = await store.createWorkspace({ label: "Native workspace", rootPath: canvasHome });
+  expect(created.rootPath).toBe(canvasHome);
+  expect((await store.getWorkspace(created.id)).rootPath).toBe(canvasHome);
+});
+
+test("Git staging rejects Windows drive, UNC and relative drive traversal on every host", async () => {
+  const store = new CanvasStore();
+  for (const path of [
+    "C:\\outside\\secret.txt",
+    "D:relative.txt",
+    "\\\\server\\share\\secret.txt",
+    "/etc/passwd",
+    "../escape.txt",
+    "..\\escape.txt",
+  ]) {
+    await expect(store.stageGitPath(canvasHome, path)).rejects.toThrow(/repository-relative/);
+  }
+});
+
+test("workspace persistence produces valid JSON without orphan temporary writes", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const original = await store.getActiveWorkspace();
+  await store.saveWorkspace({ ...original, label: "After restart" });
+  const reloaded = new CanvasStore();
+  expect((await reloaded.getActiveWorkspace()).label).toBe("After restart");
+  const names = await readdir(join(canvasHome, "workspaces"));
+  expect(names.filter((name) => name.endsWith(".tmp"))).toEqual([]);
+});
+
+test("switches, saves, and closes workspaces", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const created = await store.createWorkspace({ label: "Work", rootPath: "/" });
+  expect((await store.listWorkspaces()).activeWorkspaceId).toBe(created.id);
+
+  const saved = await store.saveWorkspace({
+    ...created,
+    activeView: "canvas",
+    canvasViewport: { x: 20, y: 30, zoom: 1.2 },
+  });
+  expect(saved.activeView).toBe("canvas");
+  expect((await store.getWorkspace(created.id)).canvasViewport.x).toBe(20);
+
+  const closed = await store.closeWorkspace(created.id);
+  expect(closed.workspaces.some((workspace) => workspace.id === created.id)).toBe(false);
+  expect(closed.activeWorkspaceId).toBeTruthy();
+});
+
+test("persists workspace settings and tabbed tiled leaves", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const workspace = await store.getActiveWorkspace();
+  const now = new Date().toISOString();
+  const editorOne = {
+    id: "editor:one",
+    type: "editor" as const,
+    title: "one.ts",
+    filePath: join(process.cwd(), "one.ts"),
+    draftBody: "const one = 1;\n",
+    dirty: false,
+    placement: "tiled" as const,
+    rect: { x: 0, y: 0, width: 600, height: 400 },
+    z: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const editorTwo = {
+    ...editorOne,
+    id: "editor:two",
+    title: "two.ts",
+    filePath: join(process.cwd(), "two.ts"),
+    draftBody: "const two = 2;\n",
+  };
+  const explorerId = workspace.panes[0]!.id;
+  const customTheme = {
+    id: "custom:test",
+    label: "Test Theme",
+    mode: "light" as const,
+    colors: {
+      ...DEFAULT_THEME_COLORS.light,
+      primary: "#2563eb",
+      panelBg: "rgba(255, 255, 255, 0.82)",
+    },
+  };
+
+  const saved = await store.saveWorkspace({
+    ...workspace,
+    settings: {
+      theme: "custom:test",
+      defaultView: "canvas",
+      backgroundStyle: "dot",
+      customThemes: [customTheme],
+      tabbedPanes: false,
+    },
+    panes: [...workspace.panes, editorOne, editorTwo],
+    tiledLayout: {
+      type: "leaf",
+      paneId: editorTwo.id,
+      paneIds: [explorerId, editorOne.id, editorTwo.id],
+      activePaneId: editorTwo.id,
+    },
+    activePaneId: editorTwo.id,
+  });
+
+  expect(saved.settings).toEqual({
+    theme: "custom:test",
+    defaultView: "canvas",
+    backgroundStyle: "dot",
+    customThemes: [customTheme],
+    tabbedPanes: false,
+  });
+  expect(saved.tiledLayout?.type).toBe("leaf");
+  if (saved.tiledLayout?.type === "leaf") {
+    expect(saved.tiledLayout.paneIds).toEqual([explorerId, editorOne.id, editorTwo.id]);
+    expect(saved.tiledLayout.activePaneId).toBe(editorTwo.id);
+  }
+
+  const pruned = await store.saveWorkspace({
+    ...saved,
+    panes: saved.panes.filter((pane) => pane.id !== editorTwo.id),
+  });
+  expect(pruned.tiledLayout?.type).toBe("leaf");
+  if (pruned.tiledLayout?.type === "leaf") {
+    expect(pruned.tiledLayout.paneIds).toEqual([explorerId, editorOne.id]);
+    expect(pruned.tiledLayout.activePaneId).toBe(explorerId);
+  }
+});
+
+test("persists settings panes as workspace pane state", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const workspace = await store.getActiveWorkspace();
+  const explorerId = workspace.panes[0]!.id;
+  const now = new Date().toISOString();
+  const settingsPane = {
+    id: "settings:test",
+    type: "settings" as const,
+    title: "Settings",
+    placement: "tiled" as const,
+    rect: { x: 20, y: 30, width: 720, height: 480 },
+    z: 2,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const saved = await store.saveWorkspace({
+    ...workspace,
+    panes: [...workspace.panes, settingsPane],
+    tiledLayout: {
+      type: "leaf",
+      paneId: settingsPane.id,
+      paneIds: [explorerId, settingsPane.id],
+      activePaneId: settingsPane.id,
+    },
+    activePaneId: settingsPane.id,
+  });
+
+  expect(saved.panes.some((pane) => pane.type === "settings")).toBe(true);
+  expect((await store.getWorkspace(workspace.id)).panes.some((pane) => pane.type === "settings")).toBe(true);
+});
+
+test("workspace API handlers expose list, create, save, and close contracts", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const ctx: AppContext = { store };
+
+  const create = lookupHandler("workspace.create");
+  const list = lookupHandler("workspace.list");
+  const save = lookupHandler("workspace.save");
+  const close = lookupHandler("workspace.close");
+  expect(create).toBeFunction();
+  expect(list).toBeFunction();
+  expect(save).toBeFunction();
+  expect(close).toBeFunction();
+
+  const created = (await create?.(ctx, { label: "API Workspace", rootPath: "/" })) as { workspace: Workspace };
+  expect(created.workspace.label).toBe("API Workspace");
+
+  const saved = (await save?.(ctx, { workspace: { ...created.workspace, activeView: "canvas" } })) as {
+    workspace: Workspace;
+  };
+  expect(saved.workspace.activeView).toBe("canvas");
+
+  const listed = (await list?.(ctx, undefined)) as Awaited<ReturnType<CanvasStore["listWorkspaces"]>>;
+  expect(listed.workspaces.length).toBeGreaterThanOrEqual(2);
+
+  const closed = (await close?.(ctx, { id: created.workspace.id })) as Awaited<
+    ReturnType<CanvasStore["closeWorkspace"]>
+  >;
+  expect(closed.workspaces.some((workspace) => workspace.id === created.workspace.id)).toBe(false);
+});
+
+test("discovers git repositories and returns readonly status and diff", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "canvas-git-"));
+  try {
+    await run("git", ["init"], repo);
+    // Preserve real Git configuration semantics without spawning two extra
+    // Windows Git processes before the 14-operation integration scenario.
+    await appendFile(join(repo, ".git", "config"), "\n[user]\n  email = test@example.com\n  name = Test User\n");
+    await writeFile(join(repo, "file.txt"), "one\n");
+    await run("git", ["add", "file.txt"], repo);
+    await run("git", ["commit", "-m", "initial"], repo);
+    await writeFile(join(repo, "file.txt"), "two\n");
+
+    const store = new CanvasStore();
+    await store.ensureInitialized();
+    const repositories = await store.listGitRepositories(repo);
+    expect(repositories[0]?.rootPath).toBe(repo);
+
+    const status = await store.getGitStatus(repo);
+    expect(status.clean).toBe(false);
+    expect(status.files[0]?.path).toBe("file.txt");
+
+    const diff = await store.getGitDiff(repo, "file.txt");
+    expect(diff.diff).toContain("-one");
+    expect(diff.diff).toContain("+two");
+
+    const staged = await store.stageGitPath(repo, "file.txt");
+    expect(staged.files.find((file) => file.path === "file.txt")?.staged).toBe(true);
+    const unstaged = await store.unstageGitPath(repo, "file.txt");
+    expect(unstaged.files.find((file) => file.path === "file.txt")?.staged).toBe(false);
+    await expect(store.stageGitPath(repo, "../outside.txt")).rejects.toThrow("repository-relative");
+    await store.stageGitPath(repo, "file.txt");
+    const committed = await store.commitGit(repo, "save changes");
+    expect(committed.clean).toBe(true);
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("browser sessions persist pane navigation state", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const { workspace, browserPane } = await saveWorkspaceWithBrowserPane(store);
+
+  const navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "data:text/html,<h1>Canvas</h1>",
+  });
+  expect(navigated.browser.url).toContain("data:text/html");
+  expect(navigated.browser.profilePath).toContain(encodeURIComponent(workspace.id));
+});
+
+test("browser navigation supports push, replace, history bounds, and blank normalization", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const { workspace, browserPane } = await saveWorkspaceWithBrowserPane(store);
+
+  await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/one",
+  });
+  let navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/two",
+  });
+  let pane = browserPaneFrom(navigated.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/two");
+  expect(pane.history).toEqual(["about:blank", "https://example.com/one", "https://example.com/two"]);
+  expect(pane.historyIndex).toBe(2);
+  expect(navigated.browser.canGoBack).toBe(true);
+  expect(navigated.browser.canGoForward).toBe(false);
+
+  const back = await store.moveBrowserHistory({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "back",
+  });
+  pane = browserPaneFrom(back.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/one");
+  expect(pane.historyIndex).toBe(1);
+  expect(back.browser.canGoBack).toBe(true);
+  expect(back.browser.canGoForward).toBe(true);
+
+  const replaced = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/replaced",
+    replace: true,
+  });
+  pane = browserPaneFrom(replaced.workspace, browserPane.id);
+  expect(pane.history).toEqual(["about:blank", "https://example.com/replaced", "https://example.com/two"]);
+  expect(pane.historyIndex).toBe(1);
+
+  const forward = await store.moveBrowserHistory({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "forward",
+  });
+  pane = browserPaneFrom(forward.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/two");
+  expect(pane.historyIndex).toBe(2);
+
+  const boundary = await store.moveBrowserHistory({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "forward",
+  });
+  pane = browserPaneFrom(boundary.workspace, browserPane.id);
+  expect(pane.url).toBe("https://example.com/two");
+  expect(pane.historyIndex).toBe(2);
+
+  navigated = await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: INTERNAL_BLANK_BROWSER_URL,
+  });
+  pane = browserPaneFrom(navigated.workspace, browserPane.id);
+  expect(pane.url).toBe("about:blank");
+  expect(pane.history.at(-1)).toBe("about:blank");
+});
+
+test("browser history API moves persisted pane history", async () => {
+  const store = new CanvasStore();
+  await store.ensureInitialized();
+  const ctx: AppContext = { store };
+  const { workspace, browserPane } = await saveWorkspaceWithBrowserPane(store);
+  await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/one",
+  });
+  await store.navigateBrowserPane({
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    url: "https://example.com/two",
+  });
+
+  const history = lookupHandler("browser.history");
+  expect(history).toBeFunction();
+  const moved = (await history?.(ctx, {
+    workspaceId: workspace.id,
+    paneId: browserPane.id,
+    direction: "back",
+  })) as Awaited<ReturnType<CanvasStore["moveBrowserHistory"]>>;
+
+  expect(moved.browser.url).toBe("https://example.com/one");
+  expect(browserPaneFrom(moved.workspace, browserPane.id).historyIndex).toBe(1);
+});
+
+async function saveWorkspaceWithBrowserPane(store: CanvasStore): Promise<{
+  workspace: Workspace;
+  browserPane: BrowserPaneState;
+}> {
+  const workspace = await store.getActiveWorkspace();
+  const now = new Date().toISOString();
+  const browserPane: BrowserPaneState = {
+    id: "browser:test",
+    type: "browser",
+    title: "Browser",
+    url: "about:blank",
+    history: ["about:blank"],
+    historyIndex: 0,
+    sessionId: "browser:test:session",
+    placement: "tiled",
+    rect: { x: 0, y: 0, width: 800, height: 500 },
+    z: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const saved = await store.saveWorkspace({
+    ...workspace,
+    panes: [...workspace.panes, browserPane],
+    tiledLayout: {
+      type: "split",
+      id: "split:browser",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: workspace.tiledLayout ?? { type: "leaf", paneId: workspace.panes[0]!.id },
+      second: { type: "leaf", paneId: browserPane.id },
+    },
+  });
+  return { workspace: saved, browserPane };
+}
+
+function browserPaneFrom(workspace: Workspace, paneId: string): BrowserPaneState {
+  const pane = workspace.panes.find((candidate) => candidate.id === paneId);
+  if (pane?.type !== "browser") throw new Error(`missing browser pane: ${paneId}`);
+  return pane;
+}
+
+async function run(command: string, args: string[], cwd: string) {
+  const proc = Bun.spawn([command, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  if (exitCode !== 0) throw new Error(`${command} ${args.join(" ")} failed: ${stdout}${stderr}`);
+}

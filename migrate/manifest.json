@@ -1,0 +1,1003 @@
+{
+  "schemaVersion": 2,
+  "createdUTC": "2026-11-02",
+  "purpose": "Isolated reference source snapshots, not an integrated application or production executable",
+  "acceptance": "CANDIDATE_REQUIRES_INDEPENDENT_REVIEW",
+  "canonicalRepository": "marius-patrik/Wrkbench",
+  "sourceOnlyTargetBranch": "main",
+  "rootBaseline": {
+    "commit": "39341ce5f8459b834c8e20b5227c25980078a87e",
+    "tree": "8ab3458d865cfb6813a4a95ba1615f6cf968865b",
+    "policy": "Original active runtime and build files remain unchanged. Dedicated migration PR workflow tests nested source; W02 adds a constrained main release push path filter to block source-only releases."
+  },
+  "historyOnlyMergeParent": "53a2e71f1771179139724dadde6f675fea0713b8",
+  "sourceSnapshots": {
+    "rscode": {
+      "repository": "marius-patrik/DarkFactory-web",
+      "originalRepository": "marius-patrik/RSCode (renamed)",
+      "originalBranch": "main",
+      "originalSHA": "39341ce5f8459b834c8e20b5227c25980078a87e",
+      "reconciliationSourceSHA": "0e797adca5315e859d61e216d8a763f2920c39fc",
+      "additionalSourceSHA": "6ed334bcad6e89a1837c299937c4c50207904541",
+      "snapshotTreeSHA": "6cc9abe201cda07a180f1ff04a48b98bff065df3",
+      "expectedOwner": "DarkFactory-web unified local provider",
+      "acceptedChanges": [
+        "RSC-03 exact-origin loopback security code and tests from existing verified integration tree",
+        "RSC-04 single-flight Chromium implementation and concurrency tests"
+      ],
+      "provisionalChanges": [
+        "RSC-05 native distribution scripts and documentation from PR #28; packaging issues unresolved",
+        "W04: host-native path.isAbsolute validates resolved Windows drive/UNC workspace roots; Git staging rejects win32 absolute, UNC and drive-relative pathspecs. New cross-platform source regression tests; OS acceptance pending.",
+        "W04: PR-only, read-only native distribution matrix executes real four-OS portable archive creation and out-of-checkout acceptance. Native run results pending; no binaries published.",
+        "W04: real four-OS native acceptance at deeeda6c: Linux x64, macOS ARM64/x64 PASS; Windows workspace mutation now PASS but Chromium probe timed out after 70s. Added phase/launch diagnostics and timeout stdout retention for root cause evidence; current probe fixes unverified.",
+        "W04: native acceptance harness avoids PIPE inherited-handle hangs on Windows by directing child output to a temp file and waiting for Bun PID; pending exact-head OS verification.",
+        "W04: installed native archive acceptance now exercises filesystem create/edit/read plus Git init/discovery/status against the host sandbox. Exact-head OS verification pending.",
+        "W04: diagnostic Windows installed-browser probe now tests the Playwright full Chromium channel instead of the unresponsive headless-shell CDP pipe. Pending real Windows acceptance.",
+        "W04: real Windows source job at 65527c8b failed old 5s Git discovery/status/diff integration test (12/13 tests passed). Eliminated two redundant `git config` subprocess startups from fixture while retaining real Git config in .git/config; exact-head retest pending."
+      ],
+      "knownUnresolved": [
+        "Windows path/UNC/PTTY/Chromium acceptance",
+        "intermittent direct PTY test flake",
+        "OS distribution packaging has not been rerun against this hybrid source"
+      ],
+      "license": "No root LICENSE in selected main baseline",
+      "testCommands": [
+        "bun install --frozen-lockfile",
+        "bun run verify",
+        "bun run test:browser",
+        "bun run test:ui"
+      ],
+      "testResults": "W02_R_CANDIDATE_SOURCE_SUITE_PASS_05016825; native OS and intermittent reliability pending",
+      "acceptanceState": "PROVISIONAL_SOURCE_ONLY",
+      "originalSourceRevision": "39341ce5f8459b834c8e20b5227c25980078a87e",
+      "reconciliationRevision": "0e797adca5315e859d61e216d8a763f2920c39fc",
+      "sourceTestEvidence": {
+        "testedHeadSHA": "0c596f59451ee0e337526c90c1d6cf43cd45c209",
+        "testedSnapshotTreeSHA": "d3588b5ea1f3c4184728f6036a40da3b174dbd09",
+        "workflowRun": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41630736085",
+        "job": "rscode",
+        "result": "PASS",
+        "executed": [
+          "bun install --frozen-lockfile",
+          "bun run typecheck",
+          "bun run lint",
+          "bun test src"
+        ],
+        "platform": "GitHub-hosted Ubuntu + Chromium where exercised",
+        "limitation": "Ubuntu source suite only; native OS artifacts, Windows, startup races and repeat stress NOT RUN in this wave."
+      },
+      "w04SourceDelta": {
+        "codeHeadSHA": "4ecdfa612d3ed4a46eb91f3e6bf72e13d9105fcc",
+        "snapshotTreeSHA": "6cc9abe201cda07a180f1ff04a48b98bff065df3",
+        "changedFiles": [
+          "src/server/store.ts",
+          "src/tests/store.test.ts",
+          "scripts/distribution/build.ts",
+          "scripts/distribution/browser-probe.ts",
+          "scripts/distribution/accept.py",
+          "scripts/distribution/accept.py",
+          "src/tests/store.test.ts"
+        ],
+        "testState": "W04_UBUNTU_SOURCE_AND_WINDOWS_STORE_PASS_AT_1DF63B0_NATIVE_MATRIX_PENDING",
+        "limitations": [
+          "Windows source suite not yet verified",
+          "Native four-OS extracted distribution acceptance not run",
+          "No Chromium lifecycle reliability fix"
+        ],
+        "nativeRun": {
+          "verifiedCommit": "deeeda6cb190ae614d609cf58226e21e216340ad",
+          "workflowRunId": 42220282052,
+          "platformResults": {
+            "linux-x64": "PASS",
+            "macos-arm64": "PASS",
+            "macos-x64": "PASS",
+            "windows-x64": "FAIL - installed Chromium probe timeout 70s; workspace mutation PASS"
+          },
+          "newDiagnosticsState": "NOT_YET_VERIFIED"
+        }
+      }
+    },
+    "ghcode": {
+      "repository": "marius-patrik/GHCode (deleted)",
+      "originalBranch": "development",
+      "originalSHA": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+      "reconciliationSourceSHA": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+      "snapshotTreeSHA": "95a464200187986fec15cdd2e9299a69e2c3f9da",
+      "expectedOwner": "DarkFactory-web unified GitHub + Factory provider",
+      "acceptedChanges": [
+        "GHC-01 principal isolation inherited from development source"
+      ],
+      "provisionalChanges": [
+        "GHC-00 historical regression suite preserved at evidence/ghc00-historical-tests",
+        "W02 principal-bound, transaction-committed writes; staged-commit single-transaction compare-and-write; atomic remote-push cleanup; Bun adversarial tests",
+        "W02-R IndexedDB v3 pushOperations journal with durable prepared/ready/remote-confirmed phases and atomic local completion; non-force remote-ref reconciliation.",
+        "W02-R principal change revokes in-flight transactions; browser isolation, transaction CAS, quota and journal recovery tests; DocumentService serializes acknowledged Monaco saves and guards navigation.",
+        "W03: canonical document resource identity includes principal, repository immutable ID, workspace/session, source ref and base revision; DocumentService denies malformed/foreign IDs, workspace storage rejects noncanonical owner IDs.",
+        "W03: push branch update now uses GitHub GraphQL updateRefs with beforeOid exact expected remote SHA (no REST fallback); deterministic mocked transport tests added.",
+        "W03: real Playwright GitHub transport mock rejects legacy REST PATCH and enforces beforeOid conditional ref mutation.",
+        "W03: compareAndSetOverlay adds atomic real IndexedDB document edit CAS and rejects stale revisions, concurrent deletes and account changes; actual React document writes use it; other legacy UI mutations remain non-CAS.",
+        "W03: on forced identity invalidation DocumentService revokes all private Monaco readers and quarantines dirty bytes in principal-sealed in-memory recovery; same principal may reauthenticate and reopen; beforeunload warns even after account switch. This is NOT durable across a confirmed browser close.",
+        "W03: forced cross-tab authorization invalidation now surfaces an explicit user-visible message about private in-memory recovery and browser-close durability limitation.",
+        "W03: read-only CycloneDX SBOM generator and per-source CI artifact uploads; metadata/asset license completeness remains partial.",
+        "W03: Monaco model React key and path follow canonical immutable document identity after baseSHA/ref change; test GitHub transport restores created blobs by SHA.",
+        "W03: whole-file patch export no longer suppresses arbitrary read failures as fabricated deletions; intentional deleted paths remain explicit.",
+        "W03 continued: revocation-epoch fencing protects A→B→A; persistent same-principal workspace evidence is required in resource read/write, overlay CAS, stage and commit transitions, push intent/phase/finalization, cleanup; unknown or forged workspace IDs fail closed.",
+        "W03 continued: resource storage rejects cross-account forged primary keys, invalid paths, corrupt file records, invalid blob object hashes; snapshot updates deny immutable repository/session reassignment and stale timestamps.",
+        "W03 continued: atomic stage/unstage changes use one full-staged-snapshot CAS, including multi-file rename pairs. Chromium acceptance expanded for same-principal forgery, key poisoning, staged writers, and incomplete push recovery.",
+        "W03 continued: explicit source-control pending-push reconciliation exposes journal phase, expected/last observed/intended SHAs, local commit count, inspect/export/safe retry actions; no force or automatic merge."
+      ],
+      "rejectedChanges": [
+        "GHC-02 PR #34 transactional v3 unsafe privacy/export and push queue implementation not activated"
+      ],
+      "knownUnresolved": [
+        "Full GHC-02 resource-level versioned v3 schema, immutable resource identity and revision CAS across all stores remain incomplete; current v3 upgrade adds only push journal.",
+        "Historical GHC-02 PR #34 unsafe ownership/export/migration code remains rejected and excluded.",
+        "GHC-03 browser integration, Dockview group/move lifecycle and conflict recovery are not independently accepted; additional native paths require guarding.",
+        "Legacy ambiguous-data non-destructive migration, secure import/export, quota recovery under real capacity pressure and comprehensive cross-tab release acceptance remain incomplete.",
+        "GraphQL beforeOid conditional mutation implemented in W03, but realistic conflict, permission and network-recovery acceptance are pending exact-head CI and live provider test.",
+        "Historical .darkfactory submodule gitlink and .gitmodules omitted from source snapshot (retained in original Git DAG).",
+        "Principal-revoked dirty content is only in-memory safeguarded with browser unload warning; durable principal-scoped backup and explicit export/recovery UX remain P0."
+      ],
+      "license": "GPL-3.0",
+      "testCommands": [
+        "bun install --frozen-lockfile",
+        "bun run check",
+        "bun run acceptance"
+      ],
+      "testResults": "W03_CONTINUATION_CI_PASS_42032588558_21_BUN_36_CHROMIUM; P0_ACCEPTANCE_INCOMPLETE",
+      "acceptanceState": "PROVISIONAL_SOURCE_ONLY",
+      "originalSourceRevision": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+      "reconciliationRevision": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+      "sourceTestEvidence": {
+        "testedHeadSHA": "0c596f59451ee0e337526c90c1d6cf43cd45c209",
+        "testedSnapshotTreeSHA": "d5438d3751cd6dbb5c7920d7f635ca3557a74078",
+        "workflowRun": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41630736085",
+        "job": "ghcode",
+        "result": "PASS",
+        "executed": [
+          "bun install --frozen-lockfile",
+          "bun run check (TypeScript, Biome, build)",
+          "bun test ./.github/unit/storage-unit.test.ts ./.github/unit/document-service.test.ts (10 PASS)",
+          "bun run acceptance (31 Chromium PASS, 2 workers)"
+        ],
+        "platform": "GitHub-hosted Ubuntu + Chromium",
+        "limitation": "This demonstrates current test coverage only; full GHC-02 resource CAS/legacy migration, GHC-03 all Dockview transitions, remote ref CAS and native platforms remain unaccepted."
+      },
+      "w03": {
+        "checkpointHead": "6d8827157c773e7e11fa1dd675ebefbca4ea78e7",
+        "sourceTreeSHA": "03bfad568532e9a1a6830706f71e9750633b5874",
+        "state": "SOURCE_CI_PASS_CRITICAL_ACCEPTANCE_GAPS",
+        "addedTests": [
+          ".github/unit/resource-identity.test.ts",
+          ".github/unit/github-cas.test.ts",
+          ".github/tests/push-journal.spec.ts (real IDB overlay CAS)",
+          ".github/unit/document-service.test.ts (forced account revocation and same-principal recovery)"
+        ],
+        "currentCI": "PASS migration run 41834186035, 4/4 jobs",
+        "knownGaps": [
+          "Non-destructive legacy migration",
+          "resource-level v3 CAS",
+          "forced principal revocation preserving drafts",
+          "Dockview native lifecycle",
+          "GitHub permission contract and UI reconciliation"
+        ],
+        "lastFullyTestedSourceHead": "8a2d5067fb3715398f8d0713e85f4ab46e04472a"
+      }
+    },
+    "canvas": {
+      "repository": "marius-patrik/DarkFactory-template",
+      "originalBranch": "development",
+      "originalSHA": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+      "reconciliationSourceSHA": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+      "snapshotTreeSHA": "ff07bec8e3fe3606f2f7cc6fae0b2d6f324f791a",
+      "appSubtreeSHA": "9e4880ad5742f73ad5ea482b127fdf80742695e5",
+      "expectedOwner": "DarkFactory-web unified app UI layer",
+      "acceptedChanges": [
+        "Canvas PR #41 complete standalone app, original persistence source, and app-specific browser/persistence tests preserved; no active runtime import"
+      ],
+      "provisionalChanges": [
+        "IndexedDB adapter is not imported by Canvas App; do not activate alongside GHCode v3 store",
+        "W02 generated real Bun 1.3.11 lockfile on GitHub Actions Ubuntu and enforced frozen-install CI",
+        "W02-R validated repository-context parser and deterministic bounded source graph/search, selected-repository identity contract and five active Bun contract scenarios.",
+        "W03: injected read-only runtime selected-repository provider with immutable identity/revision validation, async stale-load abort, controlled repository UI selection and bounded document/graph/search consumer rewiring. Standalone generated source remains fallback only when no adapter is supplied."
+      ],
+      "knownUnresolved": [
+        "Standalone Canvas generator still publishes curated build-time repository documents, not a live runtime selected-repository adapter.",
+        "No final unified app imports Canvas storage as authority; keep independent Canvas IndexedDB tests isolated.",
+        "Advanced responsive/graph/omnibar/Monaco visual acceptance is limited to the retained standalone Chromium smoke.",
+        "Template website retirement remains gated by source-baseline acceptance; PR #42 workflow security remains upstream.",
+        "W03 runtime provider is wired to standalone shell with generated-context default; full unified-app adapter, external repository authorization and browser switching acceptance still pending."
+      ],
+      "license": "GPL-3.0",
+      "testCommands": [
+        "cd migrate/canvas/.github/app && bun install --frozen-lockfile",
+        "cd migrate/canvas/.github/app && bun run check",
+        "node migrate/canvas/.github/tests/persistence/canvas-persistence.mjs",
+        "node migrate/canvas/.github/tests/smoke_canvas.mjs migrate/canvas/.canvas-dist/index.html"
+      ],
+      "testResults": "W03_SOURCE_CI_PASS_41834186035; FUNCTIONAL_AND_SECURITY_ACCEPTANCE_INCOMPLETE",
+      "acceptanceState": "PROVISIONAL_SOURCE_ONLY",
+      "originalSourceRevision": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+      "reconciliationRevision": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+      "sourceTestEvidence": {
+        "testedHeadSHA": "0c596f59451ee0e337526c90c1d6cf43cd45c209",
+        "testedSnapshotTreeSHA": "1e99bf067ace6d0af37cf447662b822137a5f481",
+        "workflowRun": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41630736085",
+        "job": "canvas",
+        "result": "PASS",
+        "executed": [
+          "bun install --frozen-lockfile (Bun 1.3.11)",
+          "bun run check (TypeScript, Biome, build and 5 source-context tests)",
+          "23 Chromium IndexedDB scenarios",
+          "Chromium app smoke"
+        ],
+        "platform": "GitHub-hosted Ubuntu + Chromium",
+        "limitation": "Selected-repository runtime provider, complete UI lifecycle and final production ownership are still unaccepted."
+      },
+      "w03": {
+        "checkpointHead": "7e6de1f480c2cb790c8664b182b6c021dd23b491",
+        "sourceTreeSHA": "83a92de0e33027e7688e6867095b0b36b6fd48ec",
+        "state": "SOURCE_CI_PASS_CRITICAL_ACCEPTANCE_GAPS",
+        "addedTests": [
+          ".github/tests/runtime-repository.test.ts (5 contract scenarios)"
+        ],
+        "currentCI": "PASS migration run 41834186035, 4/4 jobs",
+        "lastFullyTestedSourceHead": "8a2d5067fb3715398f8d0713e85f4ab46e04472a"
+      },
+      "w04BrowserAdapterAcceptance": {
+        "fixture": "migrate/canvas/.github/app/tests/runtime-repository-browser-harness.ts",
+        "script": "migrate/canvas/.github/tests/runtime-repository-browser.mjs",
+        "validation": "Real Chromium injected adapter, rapid repository switch, stale content rejection, forged identity fail-closed, recovery",
+        "status": "PENDING_EXACT_HEAD_FORMATTED_BROWSER_CI",
+        "privacyFix": "Invalid identity now increments generation, clears selected identity and old source context, preserves validation error. Browser test forces stale completion."
+      }
+    }
+  },
+  "sourceHistory": {
+    "ghcode": {
+      "source": "marius-patrik/GHCode",
+      "counts": {
+        "refs": 30,
+        "uniqueTipCommits": 25,
+        "branches": 6,
+        "pullHeadRefs": 15,
+        "tags": 9
+      },
+      "refs": [
+        {
+          "ref": "refs/remotes/ghcode-pr/11",
+          "object": "67b63b4883e2543dba7dbed884f6698273fea538",
+          "commit": "67b63b4883e2543dba7dbed884f6698273fea538"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/13",
+          "object": "e3974895863ff08102d31114fc3b87fa2f409a7a",
+          "commit": "e3974895863ff08102d31114fc3b87fa2f409a7a"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/15",
+          "object": "22336690c4422b02cef56c07a81be8f600f4c0db",
+          "commit": "22336690c4422b02cef56c07a81be8f600f4c0db"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/16",
+          "object": "109097091073d9d300d348c272d1de61d5e6feb5",
+          "commit": "109097091073d9d300d348c272d1de61d5e6feb5"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/20",
+          "object": "48f5cf5e5286300f08651eec0db478179514f884",
+          "commit": "48f5cf5e5286300f08651eec0db478179514f884"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/21",
+          "object": "8b182b9ea04f3c8ed953298566b0afd83cff16b4",
+          "commit": "8b182b9ea04f3c8ed953298566b0afd83cff16b4"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/23",
+          "object": "10ece37242ef987e3b99ec9d9f9473012237596a",
+          "commit": "10ece37242ef987e3b99ec9d9f9473012237596a"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/29",
+          "object": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+          "commit": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/3",
+          "object": "e45e9dd9c1729e376a453834c46ff784f6eaed3e",
+          "commit": "e45e9dd9c1729e376a453834c46ff784f6eaed3e"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/30",
+          "object": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+          "commit": "7b82a9f8ed199747a7959184b3ed208a464e1480"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/33",
+          "object": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+          "commit": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/34",
+          "object": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+          "commit": "49d194f75eccd919401d10bf1ef3f0df34ca9a34"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/5",
+          "object": "9253f60f0721ae48365238dc408c268aceac3f32",
+          "commit": "9253f60f0721ae48365238dc408c268aceac3f32"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/7",
+          "object": "86493007d94e8ad1e54da5f963afe15f51cfe215",
+          "commit": "86493007d94e8ad1e54da5f963afe15f51cfe215"
+        },
+        {
+          "ref": "refs/remotes/ghcode-pr/9",
+          "object": "7be2aaa81e91bac854713e547038519c784a6e24",
+          "commit": "7be2aaa81e91bac854713e547038519c784a6e24"
+        },
+        {
+          "ref": "refs/remotes/ghcode/agent/ghc-00-baseline",
+          "object": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+          "commit": "7b82a9f8ed199747a7959184b3ed208a464e1480"
+        },
+        {
+          "ref": "refs/remotes/ghcode/agent/ghc-01-identity-isolation",
+          "object": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+          "commit": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded"
+        },
+        {
+          "ref": "refs/remotes/ghcode/agent/ghc-02-transactional-v3",
+          "object": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+          "commit": "49d194f75eccd919401d10bf1ef3f0df34ca9a34"
+        },
+        {
+          "ref": "refs/remotes/ghcode/development",
+          "object": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+          "commit": "7801784b5bb596dcc720a48b7085443fc8f9ca3f"
+        },
+        {
+          "ref": "refs/remotes/ghcode/fix/ghc-09a-safe-branch-cleanup",
+          "object": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+          "commit": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d"
+        },
+        {
+          "ref": "refs/remotes/ghcode/main",
+          "object": "534e2203425d91783111e5d02d5ec92649fec594",
+          "commit": "534e2203425d91783111e5d02d5ec92649fec594"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.0",
+          "object": "7587582fc2164c7800215afdb24523eb6311e465",
+          "commit": "7587582fc2164c7800215afdb24523eb6311e465"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.1",
+          "object": "f03ab58c014a85faf0d213a124accf38ad16e07f",
+          "commit": "f03ab58c014a85faf0d213a124accf38ad16e07f"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.2",
+          "object": "ebfde874e1f81ae2a4141cf366a005874bf525cf",
+          "commit": "ebfde874e1f81ae2a4141cf366a005874bf525cf"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.3",
+          "object": "95703439660cd9dd17822a4a6d3256f97ed16872",
+          "commit": "95703439660cd9dd17822a4a6d3256f97ed16872"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.4",
+          "object": "e5d92b256c3b1f1d90656f9a5c9d2aeca9812b18",
+          "commit": "e5d92b256c3b1f1d90656f9a5c9d2aeca9812b18"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.5",
+          "object": "c50d52a3ba6c15eb60f9c1802b1a4f5773320a77",
+          "commit": "c50d52a3ba6c15eb60f9c1802b1a4f5773320a77"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.6",
+          "object": "195458b67c8feac470db6b608a7be71b524111b1",
+          "commit": "195458b67c8feac470db6b608a7be71b524111b1"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.7",
+          "object": "12db8b781e28e2a003ea90b94fb1d256a889bed3",
+          "commit": "12db8b781e28e2a003ea90b94fb1d256a889bed3"
+        },
+        {
+          "ref": "refs/tags/ghcode/v0.1.8",
+          "object": "534e2203425d91783111e5d02d5ec92649fec594",
+          "commit": "534e2203425d91783111e5d02d5ec92649fec594"
+        }
+      ]
+    },
+    "canvas": {
+      "source": "marius-patrik/DarkFactory-template",
+      "counts": {
+        "refs": 47,
+        "uniqueTipCommits": 43,
+        "branches": 6,
+        "pullHeadRefs": 29,
+        "tags": 12
+      },
+      "refs": [
+        {
+          "ref": "refs/remotes/template-pr/1",
+          "object": "3d77d6e21fe6c227209794c9cfd1ee6aa0424d8d",
+          "commit": "3d77d6e21fe6c227209794c9cfd1ee6aa0424d8d"
+        },
+        {
+          "ref": "refs/remotes/template-pr/10",
+          "object": "cdc2dde81b568c0b5b257f981a1b72c3ee0674a0",
+          "commit": "cdc2dde81b568c0b5b257f981a1b72c3ee0674a0"
+        },
+        {
+          "ref": "refs/remotes/template-pr/11",
+          "object": "02fee23081919ebbf29cebd6de8a9b4eca9b1ec6",
+          "commit": "02fee23081919ebbf29cebd6de8a9b4eca9b1ec6"
+        },
+        {
+          "ref": "refs/remotes/template-pr/12",
+          "object": "34637e566e366e5ae0391acef1e00f470b180bf5",
+          "commit": "34637e566e366e5ae0391acef1e00f470b180bf5"
+        },
+        {
+          "ref": "refs/remotes/template-pr/14",
+          "object": "2b592ca54173e1b05b38aa21babf720f80613ac4",
+          "commit": "2b592ca54173e1b05b38aa21babf720f80613ac4"
+        },
+        {
+          "ref": "refs/remotes/template-pr/15",
+          "object": "7cf31ffd5944a24f3755e890e62a983f99896433",
+          "commit": "7cf31ffd5944a24f3755e890e62a983f99896433"
+        },
+        {
+          "ref": "refs/remotes/template-pr/18",
+          "object": "08a391ef692510d2b9d422ab4c80f0d75ae33d1d",
+          "commit": "08a391ef692510d2b9d422ab4c80f0d75ae33d1d"
+        },
+        {
+          "ref": "refs/remotes/template-pr/19",
+          "object": "2041c43d1c6466f9ea1c207c4867fc796c79c916",
+          "commit": "2041c43d1c6466f9ea1c207c4867fc796c79c916"
+        },
+        {
+          "ref": "refs/remotes/template-pr/2",
+          "object": "b13d41376fa2e491f68ea0fafb728287360acef4",
+          "commit": "b13d41376fa2e491f68ea0fafb728287360acef4"
+        },
+        {
+          "ref": "refs/remotes/template-pr/21",
+          "object": "c5e0e73ec175f78cd670ec136eb2c8462884be6c",
+          "commit": "c5e0e73ec175f78cd670ec136eb2c8462884be6c"
+        },
+        {
+          "ref": "refs/remotes/template-pr/22",
+          "object": "b45d4268fa6573bbf1620cb1503d0c82d8318f47",
+          "commit": "b45d4268fa6573bbf1620cb1503d0c82d8318f47"
+        },
+        {
+          "ref": "refs/remotes/template-pr/24",
+          "object": "b3d23455448ddf1212070f21a4650d1bdc4a3986",
+          "commit": "b3d23455448ddf1212070f21a4650d1bdc4a3986"
+        },
+        {
+          "ref": "refs/remotes/template-pr/25",
+          "object": "c006e4b723d5d53a1c65eec12b1b15d354cfc08a",
+          "commit": "c006e4b723d5d53a1c65eec12b1b15d354cfc08a"
+        },
+        {
+          "ref": "refs/remotes/template-pr/27",
+          "object": "4541cc881910d0a0171f9372a07d863537599600",
+          "commit": "4541cc881910d0a0171f9372a07d863537599600"
+        },
+        {
+          "ref": "refs/remotes/template-pr/28",
+          "object": "8387ca983d06e9c02d2390a6e49926482dfe142e",
+          "commit": "8387ca983d06e9c02d2390a6e49926482dfe142e"
+        },
+        {
+          "ref": "refs/remotes/template-pr/3",
+          "object": "e99ec504da00811de1fd8d99979702288d001b11",
+          "commit": "e99ec504da00811de1fd8d99979702288d001b11"
+        },
+        {
+          "ref": "refs/remotes/template-pr/30",
+          "object": "925d1b998cffb2eb925c7e26d4320ad0613f0d8a",
+          "commit": "925d1b998cffb2eb925c7e26d4320ad0613f0d8a"
+        },
+        {
+          "ref": "refs/remotes/template-pr/32",
+          "object": "7b13e4e158df5de5e7206bcc5a4fd57bae34efce",
+          "commit": "7b13e4e158df5de5e7206bcc5a4fd57bae34efce"
+        },
+        {
+          "ref": "refs/remotes/template-pr/34",
+          "object": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+          "commit": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9"
+        },
+        {
+          "ref": "refs/remotes/template-pr/36",
+          "object": "2700f23cdbfc3bfb861e6d6e2be2174c913dfd17",
+          "commit": "2700f23cdbfc3bfb861e6d6e2be2174c913dfd17"
+        },
+        {
+          "ref": "refs/remotes/template-pr/37",
+          "object": "0009efb3b2012ebda068b7d4fa9f0501d14fb0a0",
+          "commit": "0009efb3b2012ebda068b7d4fa9f0501d14fb0a0"
+        },
+        {
+          "ref": "refs/remotes/template-pr/39",
+          "object": "defe601e39d70ebb882cf6b4f39ebe9da8be3f64",
+          "commit": "defe601e39d70ebb882cf6b4f39ebe9da8be3f64"
+        },
+        {
+          "ref": "refs/remotes/template-pr/41",
+          "object": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+          "commit": "bf17d45c8068a3bda8de5d4786a829bb4c511a86"
+        },
+        {
+          "ref": "refs/remotes/template-pr/42",
+          "object": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+          "commit": "5f462ea6e73c570e483149d6846dcc9190c09d51"
+        },
+        {
+          "ref": "refs/remotes/template-pr/5",
+          "object": "d1b46dc0e040b661a50057fe7eabccda60258501",
+          "commit": "d1b46dc0e040b661a50057fe7eabccda60258501"
+        },
+        {
+          "ref": "refs/remotes/template-pr/6",
+          "object": "34c7218ac216a074ebaeb587535a9e1a3d48d506",
+          "commit": "34c7218ac216a074ebaeb587535a9e1a3d48d506"
+        },
+        {
+          "ref": "refs/remotes/template-pr/7",
+          "object": "879078735c40ac4e70d5cc21e62aac014916b394",
+          "commit": "879078735c40ac4e70d5cc21e62aac014916b394"
+        },
+        {
+          "ref": "refs/remotes/template-pr/8",
+          "object": "3e40e20271bbb428ba4781cf7b77b3d46057089e",
+          "commit": "3e40e20271bbb428ba4781cf7b77b3d46057089e"
+        },
+        {
+          "ref": "refs/remotes/template-pr/9",
+          "object": "493aabd1c5b470852bfeca2c957a87ddae6101e9",
+          "commit": "493aabd1c5b470852bfeca2c957a87ddae6101e9"
+        },
+        {
+          "ref": "refs/remotes/template/agent/canvas-c01-idb-foundation",
+          "object": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+          "commit": "bf17d45c8068a3bda8de5d4786a829bb4c511a86"
+        },
+        {
+          "ref": "refs/remotes/template/agent/canvas-release-security-foundation",
+          "object": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+          "commit": "5f462ea6e73c570e483149d6846dcc9190c09d51"
+        },
+        {
+          "ref": "refs/remotes/template/development",
+          "object": "f647f7adc984db8231ba7ddf9ab19579ab340853",
+          "commit": "f647f7adc984db8231ba7ddf9ab19579ab340853"
+        },
+        {
+          "ref": "refs/remotes/template/df-main/v0.292.4",
+          "object": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+          "commit": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9"
+        },
+        {
+          "ref": "refs/remotes/template/feat/stateless-repository-canvas",
+          "object": "8158f703506414a13c03d7c38168b888f8127c08",
+          "commit": "8158f703506414a13c03d7c38168b888f8127c08"
+        },
+        {
+          "ref": "refs/remotes/template/main",
+          "object": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+          "commit": "63a6e0e0c044deead678a7f7c7a3551450eda8b2"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.1",
+          "object": "9b3336e2054ffadc6505e4a7b2380a81aad50d06",
+          "commit": "9b3336e2054ffadc6505e4a7b2380a81aad50d06"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.10",
+          "object": "ebc1fc23bc26ddcbf14a14579b5f12cfaf09c098",
+          "commit": "ebc1fc23bc26ddcbf14a14579b5f12cfaf09c098"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.11",
+          "object": "9b86206cfc9e7a83dbb3fea1c96a35a170682a27",
+          "commit": "9b86206cfc9e7a83dbb3fea1c96a35a170682a27"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.12",
+          "object": "f8267de05ea91bd033cc495dbb7425d9da959426",
+          "commit": "f8267de05ea91bd033cc495dbb7425d9da959426"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.13",
+          "object": "a4445374f2f78a0bb6f88f3685f6ba383d1108be",
+          "commit": "a4445374f2f78a0bb6f88f3685f6ba383d1108be"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.14",
+          "object": "83d7eca30a8ebfe4bc1b7de77c0540fd9f885106",
+          "commit": "83d7eca30a8ebfe4bc1b7de77c0540fd9f885106"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.15",
+          "object": "040ebe548b2d18a287cd91b6c5c31e71655ea040",
+          "commit": "040ebe548b2d18a287cd91b6c5c31e71655ea040"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.16",
+          "object": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+          "commit": "63a6e0e0c044deead678a7f7c7a3551450eda8b2"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.3",
+          "object": "4c4a9387c0eceda3760e373b569338caba7996f9",
+          "commit": "4c4a9387c0eceda3760e373b569338caba7996f9"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.5",
+          "object": "5fc9b1663582bcd07c95d5d9fc438003e93131f2",
+          "commit": "5fc9b1663582bcd07c95d5d9fc438003e93131f2"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.7",
+          "object": "10702bd4519f485c5411911538f6895f23512e1f",
+          "commit": "10702bd4519f485c5411911538f6895f23512e1f"
+        },
+        {
+          "ref": "refs/tags/template/v0.1.9",
+          "object": "6ba71f0fec3fceb83d5f81e84bbd3f9862a3c3ea",
+          "commit": "6ba71f0fec3fceb83d5f81e84bbd3f9862a3c3ea"
+        }
+      ]
+    },
+    "note": "These are historical original tips, not declarations of accepted runtime functionality. RSC PR head SHAs are in branchConvergence."
+  },
+  "branchConvergence": [
+    {
+      "source": "rscode",
+      "ref": "main",
+      "sha": "39341ce5f8459b834c8e20b5227c25980078a87e",
+      "status": "BASE_INCLUDED",
+      "implementation": "migrate/rscode",
+      "tests": "MAIN_INCLUDED"
+    },
+    {
+      "source": "rscode",
+      "ref": "PR #25 RSC-03",
+      "sha": "65331558418c108f889910c05e7ed7f746e108e1",
+      "status": "SECURITY_FILES_ADAPTED",
+      "implementation": "migrate/rscode/src/server; src/tests",
+      "tests": "ADAPTED_NOT_RERUN"
+    },
+    {
+      "source": "rscode",
+      "ref": "RSC-04 integration",
+      "sha": "2d26ffd8f0bdee64a2940b08b658ea68ba5f9842",
+      "status": "CHROMIUM_FILES_ADAPTED",
+      "implementation": "migrate/rscode/src/server/browserService.ts",
+      "tests": "ADAPTED_NOT_RERUN"
+    },
+    {
+      "source": "rscode",
+      "ref": "PR #28 RSC-05",
+      "sha": "6ed334bcad6e89a1837c299937c4c50207904541",
+      "status": "PACKAGING_SOURCE_INCLUDED_UNACCEPTED_WINDOWS",
+      "implementation": "migrate/rscode/scripts/distribution",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "ghcode",
+      "ref": "refs/remotes/ghcode/agent/ghc-00-baseline",
+      "sha": "7b82a9f8ed199747a7959184b3ed208a464e1480",
+      "status": "HISTORICAL_ACCEPTANCE_TESTS_COPIED",
+      "implementation": "migrate/ghcode/evidence/ghc00-historical-tests",
+      "tests": "HISTORICAL_NOT_RERUN"
+    },
+    {
+      "source": "ghcode",
+      "ref": "refs/remotes/ghcode/agent/ghc-01-identity-isolation",
+      "sha": "6d87f1c00607e42e4078bd8c2ff6aaadf4bd7ded",
+      "status": "INCORPORATED_VIA_DEVELOPMENT",
+      "implementation": "migrate/ghcode",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "ghcode",
+      "ref": "refs/remotes/ghcode/agent/ghc-02-transactional-v3",
+      "sha": "49d194f75eccd919401d10bf1ef3f0df34ca9a34",
+      "status": "UNSAFE_CODE_REJECTED_HISTORY_ONLY",
+      "implementation": null,
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "ghcode",
+      "ref": "refs/remotes/ghcode/development",
+      "sha": "7801784b5bb596dcc720a48b7085443fc8f9ca3f",
+      "status": "SELECTED_IDENTITY_ISOLATION_BASE",
+      "implementation": "migrate/ghcode",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "ghcode",
+      "ref": "refs/remotes/ghcode/fix/ghc-09a-safe-branch-cleanup",
+      "sha": "a7d5deec2bac31427f706f4b2beb1f421dc9a80d",
+      "status": "PRESERVED_NOT_RECONCILED",
+      "implementation": "migrate/ghcode",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "ghcode",
+      "ref": "refs/remotes/ghcode/main",
+      "sha": "534e2203425d91783111e5d02d5ec92649fec594",
+      "status": "PREDECESSOR_SOURCE_ONLY",
+      "implementation": "migrate/ghcode",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "canvas",
+      "ref": "refs/remotes/template/agent/canvas-c01-idb-foundation",
+      "sha": "bf17d45c8068a3bda8de5d4786a829bb4c511a86",
+      "status": "PERSISTENCE_SOURCE_AND_TESTS_INCLUDED_NOT_ACTIVATED",
+      "implementation": "migrate/canvas/.github/app/src/persistence",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "canvas",
+      "ref": "refs/remotes/template/agent/canvas-release-security-foundation",
+      "sha": "5f462ea6e73c570e483149d6846dcc9190c09d51",
+      "status": "UPSTREAM_WORKFLOW_FIX_NOT_IMPORTED",
+      "implementation": "migrate/canvas/.github/app",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "canvas",
+      "ref": "refs/remotes/template/development",
+      "sha": "f647f7adc984db8231ba7ddf9ab19579ab340853",
+      "status": "UPSTREAM_RELEASE_SECURITY_ONLY",
+      "implementation": "migrate/canvas/.github/app",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "canvas",
+      "ref": "refs/remotes/template/df-main/v0.292.4",
+      "sha": "d45ece1be1fab4847e66acf41e5b7553b0d76fc9",
+      "status": "HISTORICAL_PRESERVED",
+      "implementation": "migrate/canvas/.github/app",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "canvas",
+      "ref": "refs/remotes/template/feat/stateless-repository-canvas",
+      "sha": "8158f703506414a13c03d7c38168b888f8127c08",
+      "status": "HISTORICAL_PROTOTYPE_SUPERSEDED",
+      "implementation": "migrate/canvas/.github/app",
+      "tests": "NOT_RERUN"
+    },
+    {
+      "source": "canvas",
+      "ref": "refs/remotes/template/main",
+      "sha": "63a6e0e0c044deead678a7f7c7a3551450eda8b2",
+      "status": "TEMPLATE_ONLY_RETAINED_UPSTREAM",
+      "implementation": "migrate/canvas/.github/app",
+      "tests": "NOT_RERUN"
+    }
+  ],
+  "testEvidence": {
+    "currentWave": {
+      "gitObjectPresence": "PASS_W01_EXACT_HEAD_77_REF_RECORDS",
+      "gitBundleRestoration": "NOT_RUN_IN_CURRENT_W02_ENVIRONMENT",
+      "rootFullBun": "PASS exact tested source revision 0c596f59451ee0e337526c90c1d6cf43cd45c209 [41630736068]; later documentation-only commits do not mutate shipped root code.",
+      "chromium": "PASS Ubuntu GHCode 31 Playwright Chromium, Canvas 23 browser IDB + Chromium smoke at source verification 41630736085; full feature acceptance still incomplete.",
+      "Windows": "NOT_RUN",
+      "canvasBrowser": "PASS Canvas frozen install, 5 source-context contract tests, 23 Chromium IndexedDB scenarios and UI smoke at 0c596f59 source run 41630736085.",
+      "ghcodeBrowser": "PASS 31/31 Playwright Chromium at 0c596f59 source run 41630736085 (includes quota/save/UI real regression).",
+      "sourceIsolationCI": "PASS 0c596f59 41630736085: four jobs (history, GHCode, RSCode, Canvas) succeeded.",
+      "sourceTrackCI": "PASS 0c596f59 41630736085 all four isolated source CI jobs; full functional security and native acceptance remain separate.",
+      "historyAndIsolation": "PASS 0c596f59 CI 41630736085 verifies 77 original ref records, preserved history, source-tree hashes and root isolation. Independent offsite bundle NOT RUN.",
+      "ghcode": "PASS exact source tree d5438d37 at 0c596f59: 10 Bun unit tests + 31 Chromium. GHC-02/GHC-03 outstanding acceptance gates remain.",
+      "rscode": "PASS exact source tree d3588b5e at 0c596f59: Ubuntu tests; native packages and intermittent frame/Git/PTTY races still unresolved.",
+      "canvas": "PASS exact source tree 1e99bf06 at 0c596f59: Bun check with 5 contract tests, browser 23 IDB scenarios and UI smoke.",
+      "managedDarkFactory": "PASS d091a26eaa7ab7b814056e2c48ddc922ecebb3ac CI https://github.com/marius-patrik/DarkFactory-web/actions/runs/41511238882 (agent and approvals SKIPPED)",
+      "W02ChangesPending": "Reconciled GHCode journal, principal-bound IDB, DocumentService and Canvas source contract are committed. Full resource CAS/migration/security, RSCode native runners, licensing, template retirement and exact-head acceptance remain OPEN.",
+      "W02CanvasLock": {
+        "generationRun": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41596379238",
+        "job": 125784599781,
+        "bun": "1.3.11",
+        "sha256": "842a1d59da1c5f5b23303193545d3dd6e139f23251269132c7bdc7955e8e3d80",
+        "gitBlob": "368d67603a2be43176d5052f618e3196c650155b",
+        "status": "FROZEN_INSTALL_PASS_AT_0c596f59_SOURCE_41630736085",
+        "note": "Prior non-frozen run 41596024800 produced different SHA256 caa2634b..., showing version drift."
+      },
+      "W02RCandidate": {
+        "candidateBaseSHA": "3895da4e30819525993202a9da6424fa48e46f28",
+        "ghcodeTree": "d5438d3751cd6dbb5c7920d7f635ca3557a74078",
+        "canvasTree": "1e99bf067ace6d0af37cf447662b822137a5f481",
+        "rscodeTree": "d3588b5ea1f3c4184728f6036a40da3b174dbd09",
+        "lastVerifiedRoot": "050168252a4eb9c5b95aa93ac4ade10b782bde09",
+        "lastVerifiedCanvasAndRSCodeRun": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41629332020",
+        "currentManifestCorrection": "Exact-history and source isolation retest required",
+        "acceptance": "PROVISIONAL_SECURITY_AND_LIFECYCLE_INCOMPLETE",
+        "sourceVerifiedHeadSHA": "0c596f59451ee0e337526c90c1d6cf43cd45c209",
+        "sourceVerifiedWorkflowRun": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41630736085",
+        "sourceVerifiedJobs": [
+          "history-and-isolation",
+          "ghcode",
+          "rscode",
+          "canvas"
+        ],
+        "sourceWorkflow": "PASS",
+        "featureAcceptance": "CHANGES_REQUIRED"
+      }
+    },
+    "priorExternalEvidence": [
+      {
+        "component": "root integration pre-wave",
+        "sha": "0e797adca5315e859d61e216d8a763f2920c39fc",
+        "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41365260793",
+        "result": "PASS_RETRY_2_NOT_EVIDENCE_FOR_NEW_SNAPSHOT"
+      },
+      {
+        "component": "prior git-bundle restoration",
+        "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41363832152",
+        "result": "PASS_PRE_DELETION_ONLY"
+      },
+      {
+        "component": "root baseline W01 test-only repair",
+        "sha": "c77bbc4f5670f3dc0d760dd39004e4a8d011771c",
+        "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41509648055",
+        "result": "PASS_ROOT_VERIFY (does not test nested sources)"
+      },
+      {
+        "component": "full source run",
+        "sha": "34140810d74218661666a646eb67c9a4db270dff",
+        "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41510751170",
+        "result": "PASS_ALL_FOUR_ISOLATED_JOBS"
+      }
+    ],
+    "exactHeadW01": {
+      "revision": "d091a26eaa7ab7b814056e2c48ddc922ecebb3ac",
+      "rootVerify": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41511237736",
+      "managedQuality": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41511238882",
+      "isolatedSource": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41511237804",
+      "sourceJobs": [
+        "history-and-isolation",
+        "rscode",
+        "ghcode",
+        "canvas"
+      ],
+      "allPassed": true,
+      "limits": [
+        "no bundle restoration in this run",
+        "no Windows/macOS/Linux native archives",
+        "no GHC-03",
+        "Canvas nonfrozen dependency graph"
+      ]
+    }
+  },
+  "backups": {
+    "sourceBundle": {
+      "sha256": "e81c2d09601111b63432309751234fe9a96161a8c6834a48c79ef1ecf9d8b8f3",
+      "status": "W01_PR_REPORT_SAYS_VERIFIED_NOT_RECHECKED_W02"
+    },
+    "hostedMetadata": {
+      "sha256": "8d8e84844bb6f43a0c60890190cd2fb4dea4068e1a6e0a873ec7acf8d9d2e29a",
+      "status": "W01_PR_REPORT_SAYS_VERIFIED_NOT_RECHECKED_W02"
+    },
+    "embeddedGitBundle": {
+      "sha256": "a315d67f07af523b7ba3540c2d18457df8d11c252e776fb6fb5c7c18f1f8de45",
+      "status": "W01_PR_REPORT_ONLY_NOT_INDEPENDENTLY_RECHECKED_W02"
+    }
+  },
+  "distributionGate": "BLOCKED_T014_GPL_AND_SBOM",
+  "sourceIsolation": "Root Bun and Biome ignore migrate/** for root verification; managed df ci matrix excludes migration-only jobs (without dropping root quality) while standalone PR-only CI exercises all source tracks.",
+  "historyOnlyImportCommit": "27def47a6cc528ca3679b1e1dfd51ae1b4bb820b",
+  "w03Checkpoint": {
+    "startHead": "dfcf438d68a38abcc63176fe8eb3bec70299a0db",
+    "codeAndReportHead": "8a2d5067fb3715398f8d0713e85f4ab46e04472a",
+    "sourceTrees": {
+      "rscode": "d3588b5ea1f3c4184728f6036a40da3b174dbd09",
+      "ghcode": "03bfad568532e9a1a6830706f71e9750633b5874",
+      "canvas": "83a92de0e33027e7688e6867095b0b36b6fd48ec"
+    },
+    "migrationSource": {
+      "status": "PASS",
+      "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41834186035",
+      "tests": {
+        "ghcodeBun": 21,
+        "ghcodeChromium": 32,
+        "canvasContext": 10,
+        "canvasIndexedDB": 23
+      }
+    },
+    "rootVerify": {
+      "status": "PASS",
+      "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41834188206"
+    },
+    "runtime": {
+      "status": "PASS",
+      "run": "https://github.com/marius-patrik/DarkFactory-web/actions/runs/41834187422"
+    },
+    "sourceBaselineAcceptance": "CHANGES_REQUIRED",
+    "exclusions": [
+      "Full v3 legacy migration",
+      "Durable draft quarantine",
+      "Complete Dockview lifecycle",
+      "Native 4-platform acceptance",
+      "Live GitHub contract",
+      "Complete license rights",
+      "Original backups fresh restore",
+      "Unified application"
+    ]
+  },
+  "repositoryId": 1357326589,
+  "previousRepositoryNames": [
+    "marius-patrik/DarkFactory-web"
+  ],
+  "w03Continuation": {
+    "repositoryIdentity": "marius-patrik/Wrkbench (GitHub repository ID 1357326589; renamed from marius-patrik/DarkFactory-web)",
+    "expectedHead": "5f5c676976e0c1a19c0cbb330a7fbf79ab7818c5",
+    "sourceTrees": {
+      "canvas": "83a92de0e33027e7688e6867095b0b36b6fd48ec",
+      "ghcode": "95a464200187986fec15cdd2e9299a69e2c3f9da",
+      "rscode": "d3588b5ea1f3c4184728f6036a40da3b174dbd09"
+    },
+    "state": "EXACT_HEAD_CI_PASS_FUNCTIONAL_ACCEPTANCE_INCOMPLETE",
+    "addedBrowserScenarios": [
+      "Forged same-principal workspace without persisted ownership",
+      "Cross-account key poisoning and immutable repository reassignment",
+      "Concurrent full-stage CAS and atomic rename pair",
+      "Uncertain GitHub ref CAS, reload, durable journal recovery and idempotent finalization"
+    ],
+    "gaps": [
+      "Full legacy v2→v3 non-destructive migration",
+      "Crash-durable revoked drafts",
+      "Complete Dockview guards",
+      "Full v3 typed schema/CAS and secure import/export",
+      "Live GraphQL protected-branch behavior",
+      "RSCode native four-OS QA",
+      "Asset rights and independent offsite backup restore"
+    ],
+    "release": "NO_MERGE_NO_DEPLOY_NO_PUBLICATION",
+    "verification": {
+      "codeAndDocsHead": "e7ab82878cc38e8790ca457e9a8320c8095b0a26",
+      "source": {
+        "status": "PASS",
+        "url": "https://github.com/marius-patrik/Wrkbench/actions/runs/42032588558",
+        "jobs": [
+          "history-and-isolation",
+          "rscode",
+          "ghcode",
+          "canvas"
+        ],
+        "tests": {
+          "ghcodeBun": 21,
+          "ghcodeChromium": 36,
+          "canvasContext": 10,
+          "canvasIndexedDB": 23
+        }
+      },
+      "rootVerify": {
+        "status": "PASS",
+        "url": "https://github.com/marius-patrik/Wrkbench/actions/runs/42032588594"
+      },
+      "runtime": {
+        "status": "PASS",
+        "url": "https://github.com/marius-patrik/Wrkbench/actions/runs/42032589475"
+      },
+      "caveat": "Passing exact-head CI is not proof of full persistence security, native platform reliability or unified application acceptance."
+    }
+  }
+}

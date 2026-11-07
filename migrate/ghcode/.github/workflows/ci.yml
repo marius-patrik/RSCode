@@ -1,0 +1,175 @@
+name: CI and production Pages
+
+on:
+  pull_request:
+    branches: [development, main]
+  push:
+    branches: [development, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcode-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  checks:
+    name: Verified source and browser acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Enforce committed formatting
+        run: bun run format:check
+      - name: Lint, typecheck and production build
+        run: bun run check
+      - name: Validate canonical documents
+        run: python3 .github/scripts/generate_documents.py --check
+      - name: Run repository behavior tests
+        run: python3 -m unittest discover -s .github/tests -p 'test_*.py'
+      - name: Install browser
+        run: bunx playwright install --with-deps chromium
+      - name: Browser acceptance
+        run: bun run acceptance
+
+  build-site:
+    name: Package validated production build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: checks
+    runs-on: ubuntu-latest
+    env:
+      PUBLIC_GITHUB_OAUTH_CLIENT_ID: ${{ vars.WORKBENCH_OAUTH_CLIENT_ID }}
+      PUBLIC_GITHUB_AUTH_BROKER_URL: ${{ vars.WORKBENCH_AUTH_BROKER_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Validate static output
+        run: |
+          test -s dist/index.html
+          test -d dist/static
+          test -d dist/static/js
+          test -d dist/static/css
+          if find dist -type l | grep -q .; then
+            echo '::error::Published directory contains symbolic links'
+            exit 1
+          fi
+      - name: Store release contents
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghcode-production
+          path: dist/
+          if-no-files-found: error
+
+  deploy-pages:
+    name: Deploy production with GitHub Pages Actions
+    needs: build-site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: ghcode-pages-production
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Download exact verified release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: ghcode-production
+          path: site
+      - name: Check release artifact
+        run: test -s site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+      - name: Deploy directly from Actions (no gh-pages branch)
+        id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Confirm production document and entry assets
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            code="$(curl -sSL -o "$RUNNER_TEMP/index.html" -w '%{http_code}' --max-time 25 "$PAGE_URL" || true)"
+            if [ "$code" = 200 ] && grep -qi '<html' "$RUNNER_TEMP/index.html"; then break; fi
+            sleep 10
+          done
+          test "$code" = 200
+          grep -qi '<html' "$RUNNER_TEMP/index.html"
+          python3 - "$RUNNER_TEMP/index.html" "$PAGE_URL" > "$RUNNER_TEMP/entry-assets" <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+          import sys
+
+          class Assets(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.assets = []
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag == "script" and values.get("src"):
+                      self.assets.append(values["src"])
+                  if tag == "link" and values.get("rel") == "stylesheet" and values.get("href"):
+                      self.assets.append(values["href"])
+          parser = Assets()
+          parser.feed(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if not parser.assets:
+              raise SystemExit("No JavaScript/CSS entry assets")
+          for asset in parser.assets:
+              print(urljoin(sys.argv[2], asset))
+          PY
+          while IFS= read -r asset; do
+            curl --fail --location --silent --show-error --retry 4 --max-time 25 -o /dev/null "$asset"
+          done < "$RUNNER_TEMP/entry-assets"
+
+  release:
+    name: Publish immutable release after verified Pages deployment
+    needs: deploy-pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghcode-production
+          path: dist
+      - name: Tag and publish exactly the deployed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s dist/index.html
+          git fetch origin --tags
+          tag="$(python3 .github/scripts/versioning.py)"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
+          else
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "refs/tags/$tag"
+          fi
+          (cd dist && zip -q -r ../ghcode-site.zip .)
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" ghcode-site.zip --target "$GITHUB_SHA" --title "$tag" --generate-notes
+          else
+            gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx 'ghcode-site.zip'
+          fi
+          gh release view "$tag" --json tagName,url

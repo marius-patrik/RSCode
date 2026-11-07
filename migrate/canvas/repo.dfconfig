@@ -1,0 +1,74 @@
+{
+  "repo": {
+    "$comment": "Starter policy and repository identity. Review and replace project-specific values before installation; declarations do not configure GitHub protection by themselves.",
+    "identity": {
+      "owner": "marius-patrik",
+      "repo": "template-repo",
+      "display_name": "Repository Template",
+      "default_branch": "main",
+      "development_branch": "development",
+      "project_title": "template-repo"
+    },
+    "license": {
+      "spdx": "GPL-3.0",
+      "holder": "Patrik Marius",
+      "year": "2026"
+    },
+    "upstream": {
+      "repo": "marius-patrik/DarkFactory",
+      "ref": "fc5896c9ffbf9b1ac5762a271ec2b26ee0efafd4"
+    },
+    "protection": {
+      "lanes": [
+        {
+          "branch": "main",
+          "required_checks": [
+            "main-source",
+            "generated-docs"
+          ],
+          "approvals": 1,
+          "enforce_admins": true,
+          "strict": true,
+          "resolve_conversations": true
+        }
+      ],
+      "$comment": "Only main is protected: PR version automation must push to the development head of the release PR. Feature PR branches remain governed by review on development."
+    },
+    "areas": {
+      "$comment": "Replace with project-specific areas; only starter labels exist until then.",
+      "$default": "docs",
+      "docs": {
+        "description": "Documentation, requirements, architecture and rules",
+        "keywords": [
+          "docs",
+          "readme",
+          "architecture",
+          "rule",
+          "request"
+        ]
+      },
+      "ci": {
+        "description": "Continuous integration and release workflows",
+        "keywords": [
+          "ci",
+          "action",
+          "release",
+          "workflow"
+        ]
+      }
+    },
+    "versioning": {
+      "mode": "tags",
+      "$comment": "Default is Git-tag-based SemVer with no VERSION file. Set mode to file and add VERSION to opt in to automatic PR version bumps."
+    },
+    "board": {
+      "global": "Global",
+      "boards": [
+        "Global",
+        "template-repo"
+      ]
+    }
+  },
+  "docs": {},
+  "providers": {}
+}
